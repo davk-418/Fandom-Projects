@@ -1,0 +1,6 @@
+# Epub
+*.epub
+
+#Logs and temp
+*.log
+*.tmp
