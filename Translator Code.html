@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>kotlc translator</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,300;0,900;1,300;1,900&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      @font-face {
+        font-family: "ElaFont";
+        src: url("https://api.github.com/repos/davk-418/ELA-Files/contents/Ela-Regular.ttf")
+          format("truetype");
+      }
+
+      body,
+      html {
+        margin: 0;
+        padding: 0;
+        font-family: "Merriweather", serif;
+        background-color: #ffffff;
+        color: #000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        box-sizing: border-box;
+      }
+
+      .container {
+        display: flex;
+        gap: 10px;
+      }
+
+      .left-box,
+      .right-box {
+        width: 600px;
+        height: 440px;
+        border: 2px solid #000;
+        border-radius: 15px;
+        background-color: #fff;
+        box-sizing: border-box;
+        padding: 10px;
+      }
+
+      .right-box {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .left-box textarea {
+        width: calc(100% - 20px);
+        height: calc(100% - 60px);
+        border: none;
+        outline: none;
+        padding: 5px;
+        font-family: "Merriweather", serif;
+        font-size: 16px;
+        resize: none;
+        background: transparent;
+        text-align: center;
+      }
+
+      .translate-btn,
+      .download-btn {
+        display: block;
+        width: 150px;
+        margin: 10px auto 0;
+        padding: 8px 16px;
+        background-color: #000;
+        border: none;
+        border-radius: 10px;
+        color: #fff;
+        font-size: 16px;
+        cursor: pointer;
+      }
+
+      .translate-btn:hover,
+      .download-btn:hover {
+        background-color: #333;
+      }
+
+      .canvas-container {
+        width: 100%;
+        flex: 1;
+        overflow-y: auto;
+      }
+
+      canvas {
+        display: block;
+        width: 100%;
+      }
+
+      /* Mobile adjustments */
+      @media (max-width: 700px) {
+        body,
+        html {
+          padding: 5px;
+          margin: 0;
+          height: auto;
+          width: 100%;
+          overflow-x: hidden;
+        }
+
+        .container {
+          flex-direction: column;
+          align-items: center;
+          width: 100%;
+        }
+
+        .left-box,
+        .right-box {
+          width: 100%;
+          aspect-ratio: 600 / 440;
+        }
+
+        .canvas-container {
+          width: 100%;
+          aspect-ratio: 600 / 440;
+        }
+
+        .left-box textarea {
+          text-align: center;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <div class="left-box">
+        <textarea id="inputText" placeholder="Enter text to translate here"></textarea>
+        <button class="translate-btn" id="translateBtn">Translate</button>
+      </div>
+      <div class="right-box">
+        <div class="canvas-container">
+          <canvas id="translatedCanvas"></canvas>
+        </div>
+        <button class="download-btn" id="downloadBtn" style="display: none;">
+          Download
+        </button>
+      </div>
+    </div>
+
+    <script>
+      const repoOwner = "davk-418";
+      const repoName = "ELA-Files";
+      const filePath = "Ela-Regular.ttf";
+      const apiUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${filePath}`;
+
+      const translateButton = document.getElementById("translateBtn");
+      const downloadButton = document.getElementById("downloadBtn");
+      const canvas = document.getElementById("translatedCanvas");
+      const ctx = canvas.getContext("2d");
+
+      function loadFont(url) {
+        return fetch(url)
+          .then((res) => res.json())
+          .then((data) => {
+            if (!data.content) throw new Error("Error fetching the font.");
+            const decoded = atob(data.content);
+            const bytes = new Uint8Array(
+              decoded.split("").map((c) => c.charCodeAt(0))
+            );
+            const blob = new Blob([bytes], { type: "font/ttf" });
+            const fontUrl = URL.createObjectURL(blob);
+            const font = new FontFace("ElaFont", `url('${fontUrl}')`);
+            return font.load().then((loaded) => {
+              document.fonts.add(loaded);
+              return "ElaFont";
+            });
+          });
+      }
+
+      function wrapText(text, context, maxWidth) {
+        const paragraphs = text.split("\n");
+        let lines = [];
+        paragraphs.forEach((para) => {
+          if (!para.trim()) {
+            lines.push("");
+          } else {
+            let words = para.split(" ");
+            let line = "";
+            words.forEach((word) => {
+              const test = line + word + " ";
+              if (context.measureText(test).width > maxWidth && line !== "") {
+                lines.push(line.trim());
+                line = word + " ";
+              } else {
+                line = test;
+              }
+            });
+            lines.push(line.trim());
+          }
+        });
+        return lines;
+      }
+
+      function translateText() {
+        const text = document.getElementById("inputText").value.trim();
+        if (!text) return alert("Please enter some text to translate.");
+
+        loadFont(apiUrl)
+          .then((fontName) => {
+            const containerWidth =
+              document.querySelector(".canvas-container").clientWidth;
+            const margin = 5;
+            const fontSize = 30;
+            const lineHeight = 36;
+
+            canvas.width = containerWidth;
+            ctx.font = `${fontSize}px ${fontName}, sans-serif`;
+
+            const maxTextWidth = canvas.width - margin * 2;
+            const lines = wrapText(text, ctx, maxTextWidth);
+
+            const totalHeight = lines.length * lineHeight + margin * 2;
+            canvas.height = totalHeight;
+
+            ctx.fillStyle = "white";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = "black";
+            ctx.font = `${fontSize}px ${fontName}, sans-serif`;
+            lines.forEach((line, i) => {
+              ctx.fillText(line, margin, margin + fontSize + i * lineHeight);
+            });
+
+            downloadButton.style.display = "block";
+          })
+          .catch((err) => alert(err.message));
+      }
+
+      function downloadCanvas() {
+        const dataUrl = canvas.toDataURL("image/png");
+        const newWin = window.open("", "_blank");
+        newWin.document.write(`
+          <!DOCTYPE html>
+          <html>
+          <body>
+            <a id="dl" href="${dataUrl}" download="translation.png" style="display:none;"></a>
+            <script>
+              document.getElementById('dl').click();
+              window.close();
+            <\/script>
+          </body>
+          </html>
+        `);
+        newWin.document.close();
+      }
+
+      translateButton.addEventListener("click", translateText);
+      downloadButton.addEventListener("click", downloadCanvas);
+    </script>
+  </body>
+</html>
