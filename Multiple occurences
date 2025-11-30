@@ -1,0 +1,48 @@
+(async function runAbilitiesTest() {
+  // 1. Click the KOTLC parent checkbox
+  const kotlcCheckbox = document.querySelector('.series-parent[data-series="Keepers of the Lost Cities"]');
+  if (kotlcCheckbox && !kotlcCheckbox.checked) {
+    kotlcCheckbox.click();
+  }
+
+  // 2. Abilities word list
+  const abilities = [
+    "example","word","list"
+  ];
+
+  // Helper: wait for results to update
+  function waitForResults() {
+    return new Promise(resolve => {
+      const observer = new MutationObserver(() => {
+        const total = document.querySelector('#results p.muted');
+        if (total) {
+          observer.disconnect();
+          resolve(total.textContent);
+        }
+      });
+      observer.observe(document.querySelector('#results'), { childList: true, subtree: true });
+    });
+  }
+
+  const results = {};
+
+  for (const ability of abilities) {
+    // 3a. Enter ability in search bar
+    const input = document.querySelector('#searchQuery');
+    input.value = ability;
+
+    // 3b. Trigger search (simulate Enter key)
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+
+    // 3c. Wait for results
+    const text = await waitForResults();
+
+    // 3d. Extract number from "Total matches: ####"
+    const match = text.match(/Total matches:\s*(\d+)/);
+    results[ability] = match ? parseInt(match[1], 10) : 0;
+
+    console.log(`Ability "${ability}" → ${results[ability]} matches`);
+  }
+
+  console.table(results);
+})();
