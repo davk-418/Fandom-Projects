@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Book Searcher — Fixed UI</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <!-- Restored font -->
+  <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.0/jszip.min.js"></script>
+  <style>
+    :root{--bg:#fff;--muted:#666;--border:#e6e6e6;--accent:#0b5fff}
+    html,body{height:100%;margin:0;font-family:"Merriweather",serif;background:var(--bg);color:#111}
+    .app{display:flex;height:100vh;overflow:hidden}
+    .sidebar{background:#fafafa;border-right:1px solid var(--border);padding:1rem;min-width:220px;max-width:520px;flex:0 0 300px;overflow:auto}
+    .resizer{width:6px;cursor:col-resize;background:var(--border);display:flex;align-items:center;justify-content:center}
+    .resizer::before{content:"⇔";font-size:12px;color:#999}
+    .main{flex:1;padding:1.25rem;overflow:auto}
+    h1,h2,h3{margin:0 0 .5rem 0}
+    .controls{display:flex;gap:.5rem;margin:.5rem 0 1rem;flex-wrap:wrap}
+    .controls button,.controls input{padding:.45rem .7rem;border:1px solid #d6d6d6;border-radius:6px;background:#fff;cursor:pointer;font-size:.9rem}
+    .search-filter{width:100%;padding:.5rem;border:1px solid #d6d6d6;border-radius:6px;margin-bottom:.75rem;font-size:.9rem}
+    .dropdown{margin-bottom:.9rem}
+    .dropdown-header{display:flex;align-items:center;gap:.5rem;padding:.35rem;border-radius:6px;background:#f3f3f3;cursor:pointer}
+    .dropdown-header:hover{background:#eef}
+    .arrow{width:18px;text-align:center;display:inline-block}
+    .dropdown-content{display:none;margin-top:.4rem;padding-left:1rem}
+    .author-btn{display:inline-flex;align-items:center;gap:.4rem;padding:.25rem .6rem;border-radius:16px;border:1px solid #ddd;background:#fff;margin:.2rem;font-size:.82rem;cursor:pointer}
+    .search-bar{width:60%;padding:.6rem;border:1px solid #d6d6d6;border-radius:6px;font-size:.95rem;margin-right:.5rem}
+    .search-btn{padding:.6rem .9rem;border-radius:6px;border:1px solid #d6d6d6;background:var(--accent);color:#fff;cursor:pointer}
+    #results{margin-top:1rem}
+    .spinner{border:4px solid #f3f3f3;border-top:4px solid var(--accent);border-radius:50%;width:30px;height:30px;animation:spin 1s linear infinite;margin:1rem auto}
+    @keyframes spin{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
+    .series-block{margin-bottom:1rem;border:1px solid var(--border);border-radius:8px;padding:.6rem;background:#fff}
+    .book-card{margin:0.6rem 0;padding:.6rem;border-radius:8px;border:1px solid #f0f0f0;background:linear-gradient(180deg,#fff,#fbfdff)}
+    .book-card + .book-card{margin-top:0.8rem}
+    .book-header{display:flex;justify-content:space-between;align-items:center;gap:.6rem;cursor:pointer}
+    .book-meta{font-size:.86rem;color:var(--muted)}
+    .chapters-list{margin-top:.5rem;padding-left:.6rem}
+    .chapter-row{display:flex;justify-content:space-between;align-items:center;padding:.35rem;border-radius:6px;background:#f7f7f7;margin:.35rem 0;cursor:pointer}
+    .occ-container{display:none;padding-left:.6rem;margin-top:.4rem}
+    .occurrence-btn{display:block;width:100%;text-align:left;margin:.2rem 0;padding:.45rem;border:1px solid #eee;background:#fff;border-radius:6px}
+    .highlight-sentence{background:#e6f0ff;padding:.6rem;border-radius:6px;margin-bottom:.5rem}
+    .muted{color:var(--muted);font-size:.9rem}
+    .controls-results{display:flex;gap:.5rem;align-items:center;margin-bottom:.75rem}
+    .divider{height:1px;background:var(--border);margin:.6rem 0;border-radius:2px}
+    .small-muted{font-size:.85rem;color:#777}
+    .toggle{display:inline-flex;align-items:center;gap:.4rem}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <h2>Series</h2>
+      <input id="seriesSearch" class="search-filter" placeholder="Filter series..." />
+      <div class="controls">
+        <button id="selectAll">Select All</button>
+        <button id="deselectAll">Deselect All</button>
+      </div>
+      <div id="seriesList"></div>
+
+      <div style="margin-top:1rem">
+        <h3>Search by author?</h3>
+        <div id="authorList"></div>
+      </div>
+    </aside>
+
+    <div class="resizer" id="resizer" title="Drag to resize"></div>
+
+    <main class="main">
+      <h1>Book Searcher</h1>
+
+      <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem">
+        <input id="searchQuery" class="search-bar" placeholder="Enter a word or phrase" />
+        <button id="searchBtn" class="search-btn">Search</button>
+      </div>
+
+      <!-- Results controls (in results area only) -->
+      <div id="resultsControls" style="display:none" class="controls-results">
+        <div>
+          <button id="expandAllResults">Expand All</button>
+          <button id="collapseAllResults">Collapse All</button>
+        </div>
+        <div style="margin-left:auto" class="toggle">
+          <label class="small-muted">Auto-collapse other books</label>
+          <input id="autoCollapse" type="checkbox" title="When opening a book, collapse other open books" />
+        </div>
+      </div>
+
+      <div id="results"></div>
+    </main>
+  </div>
+
+  <!-- Modal -->
+  <div id="occurrenceModal" aria-hidden="true" style="display:none;position:fixed;left:0;top:0;width:100%;height:100%;align-items:center;justify-content:center;background:rgba(0,0,0,0.45);z-index:9999">
+    <div style="max-width:900px;width:92%;background:#fff;border-radius:8px;padding:1rem;box-shadow:0 8px 30px rgba(0,0,0,0.3);overflow:auto;max-height:80vh">
+      <button id="modalClose" style="float:right;margin-left:.5rem">Close</button>
+      <div id="modalTitle" style="font-weight:700;margin-bottom:.5rem"></div>
+      <div id="modalContent" style="font-size:1rem;line-height:1.5"></div>
+    </div>
+  </div>
+
+  <script>
+  /* =========================
+     Catalog, authors, aliases
+     ========================= */
+  const catalog = {
+    "Percy Jackson and the Olympians": ["The Lightning Thief","The Sea of Monsters","The Titan's Curse","The Battle of the Labyrinth","The Last Olympian"],
+    "The Hero of Olympus": ["The Lost Hero","The Son of Neptune","The Mark of Athena","The House of Hades","The Blood of Olympus"],
+    "The Trials of Apollo": ["The Hidden Oracle","The Dark Prophecy","The Burning Maze","The Tyrant's Tomb","The Tower of Nero"],
+    "The Kane Chronicles": ["The Red Pyramid","The Throne of Fire","The Serpent's Shadow"],
+    "Keepers of the Lost Cities": ["Keeper of the Lost Cities","Exile","Everblaze","Neverseen","Lodestar","Nightfall","Flashback","Legacy","Unlocked","Stellarlune","Unraveled"],
+    "The Lunar Chronicles": ["Cinder","Scarlet","Cress","Winter","Fairest"],
+    "Shadow and Bone": ["Shadow and Bone","Siege and Storm","Ruin and Rising"],
+    "Six of Crows": ["Six of Crows","Crooked Kingdom"],
+    "King of Scars": ["King of Scars","Rule of Wolves"],
+    "Heartless": ["Heartless"],
+    "Prison Healer": ["The Prison Healer","The Gilded Cage","The Blood Traitor"],
+    "Mysterious Benedict Society": ["The Mysterious Benedict Society","The Perilous Journey","The Prisoner's Dilemma","The Riddle of Ages"],
+    "Renegades": ["Renegades","Archenemies","Supernova"],
+    "Raven Scholar": ["Raven Scholar"],
+    "Sky Fall Trilogy": ["Let the Sky Fall","Let the Storm Break","Let the Wind Rise"]
+  };
+
+  const authorsMap = {
+    "Rick Riordan": ["Percy Jackson and the Olympians","The Hero of Olympus","The Trials of Apollo","The Kane Chronicles"],
+    "Shannon Messenger": ["Keepers of the Lost Cities","Sky Fall Trilogy"],
+    "Marissa Meyer": ["The Lunar Chronicles","Heartless","Renegades"],
+    "Leigh Bardugo": ["Shadow and Bone","Six of Crows","King of Scars"],
+    "Lynette Noni": ["Prison Healer"],
+    "Trenton Lee Stewart": ["Mysterious Benedict Society"],
+    "Antonia Hodgson": ["Raven Scholar"]
+  };
+  const authors = Object.keys(authorsMap);
+
+  const aliases = {
+    "kotlc 1": "Keeper of the Lost Cities",
+    "kotlc 2": "Exile",
+    "kotlc 3": "Everblaze",
+    "kotlc 4": "Neverseen",
+    "kotlc 5": "Lodestar",
+    "kotlc 6": "Nightfall",
+    "kotlc 7": "Flashback",
+    "kotlc 8": "Legacy",
+    "kotlc 8.5": "Unlocked",
+    "kotlc book 9": "Stellarlune",
+    "kotlc book 9.5": "Unraveled"
+  };
+
+  const REPO_OWNER = 'davk-418';
+  const REPO_NAME = 'Fandom-Projects';
+  const REPO_BRANCH = 'main';
+  const RAW_BASE = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REPO_BRANCH}`;
+
+  function fileForTitle(title){ return `${title}.epub`; }
+  function rawUrlForFile(filename){ return `${RAW_BASE}/${encodeURIComponent(filename)}`; }
+
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function escapeRegExp(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  function cssEscape(s){ return s.replace(/"/g,'\\"'); }
+
+  /* =========================
+     Sidebar build
+     ========================= */
+  const seriesList = document.getElementById('seriesList');
+  Object.keys(catalog).forEach(series => {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'dropdown';
+
+    const header = document.createElement('div');
+    header.className = 'dropdown-header';
+    header.innerHTML = `<span class="arrow">▶</span><input type="checkbox" class="series-parent" data-series="${escapeHtml(series)}"> ${escapeHtml(series)}`;
+
+    const content = document.createElement('div');
+    content.className = 'dropdown-content';
+    catalog[series].forEach(book => {
+      const label = document.createElement('label');
+      label.innerHTML = `<input type="checkbox" class="book" value="${escapeHtml(book)}" data-series="${escapeHtml(series)}"> ${escapeHtml(book)}`;
+      content.appendChild(label);
+    });
+
+    header.addEventListener('click', e => {
+      if (e.target.tagName !== 'INPUT') {
+        const open = content.style.display === 'block';
+        content.style.display = open ? 'none' : 'block';
+        header.querySelector('.arrow').textContent = open ? '▶' : '▼';
+      }
+    });
+
+    wrapper.appendChild(header);
+    wrapper.appendChild(content);
+    seriesList.appendChild(wrapper);
+  });
+
+  // authors
+  const authorList = document.getElementById('authorList');
+  authors.forEach(author => {
+    const label = document.createElement('label');
+    label.className = 'author-btn';
+    label.innerHTML = `<input type="checkbox" class="author" value="${escapeHtml(author)}"> ${escapeHtml(author)}`;
+    authorList.appendChild(label);
+  });
+
+  // interactions
+  seriesList.addEventListener('change', e => {
+    if (e.target.classList.contains('series-parent')) {
+      const series = e.target.dataset.series;
+      const books = seriesList.querySelectorAll(`.book[data-series="${cssEscape(series)}"]`);
+      books.forEach(cb => cb.checked = e.target.checked);
+    }
+  });
+
+  document.getElementById('selectAll').addEventListener('click', () => {
+    document.querySelectorAll('.series-parent, .book').forEach(cb => cb.checked = true);
+  });
+  document.getElementById('deselectAll').addEventListener('click', () => {
+    document.querySelectorAll('.series-parent, .book').forEach(cb => cb.checked = false);
+  });
+
+  authorList.addEventListener('change', e => {
+    if (e.target.classList.contains('author')) {
+      const author = e.target.value;
+      const seriesByAuthor = authorsMap[author] || [];
+      seriesByAuthor.forEach(series => {
+        const parent = document.querySelector(`.series-parent[data-series="${cssEscape(series)}"]`);
+        if (parent) parent.checked = e.target.checked;
+        const books = document.querySelectorAll(`.book[data-series="${cssEscape(series)}"]`);
+        books.forEach(cb => cb.checked = e.target.checked);
+      });
+    }
+  });
+
+  document.getElementById('seriesSearch').addEventListener('input', e => {
+    const q = e.target.value.trim().toLowerCase();
+    document.querySelectorAll('#seriesList .dropdown').forEach(dropdown => {
+      const headerText = dropdown.querySelector('.dropdown-header').textContent.toLowerCase();
+      dropdown.style.display = headerText.includes(q) ? 'block' : 'none';
+    });
+  });
+
+  (function(){
+    const resizer = document.getElementById('resizer');
+    const sidebar = document.getElementById('sidebar');
+    let dragging = false;
+    resizer.addEventListener('mousedown', () => { dragging = true; document.body.style.cursor = 'col-resize'; });
+    document.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      const newW = e.clientX;
+      if (newW > 200 && newW < 800) sidebar.style.flex = `0 0 ${newW}px`;
+    });
+    document.addEventListener('mouseup', () => { dragging = false; document.body.style.cursor = ''; });
+  })();
+
+  /* =========================
+     EPUB helpers (unchanged)
+     ========================= */
+
+  async function findOpfPath(zip) {
+    const containerPath = 'META-INF/container.xml';
+    if (!zip.files[containerPath]) return null;
+    const containerText = await zip.files[containerPath].async('text');
+    const m = containerText.match(/full-path=["']([^"']+)["']/i);
+    return m ? m[1] : null;
+  }
+
+  function parseOpf(opfText, opfBase) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(opfText, 'application/xml');
+    const manifest = {};
+    const manifestNodes = doc.querySelectorAll('manifest > item');
+    manifestNodes.forEach(item => {
+      const id = item.getAttribute('id');
+      const href = item.getAttribute('href');
+      const mediaType = item.getAttribute('media-type') || '';
+      manifest[id] = { href: (opfBase ? opfBase + href : href), mediaType, properties: item.getAttribute('properties') || '' };
+    });
+    const spine = [];
+    doc.querySelectorAll('spine > itemref').forEach(ir => {
+      const idref = ir.getAttribute('idref');
+      spine.push(idref);
+    });
+    let ncxHref = null;
+    const ncxItem = Array.from(manifestNodes).find(i => {
+      const mt = i.getAttribute('media-type');
+      return mt && /application\/x-dtbncx\+xml/i.test(mt);
+    });
+    if (ncxItem) ncxHref = (opfBase ? opfBase + ncxItem.getAttribute('href') : ncxItem.getAttribute('href'));
+    return { manifest, spine, ncxHref };
+  }
+
+  function parseNcx(ncxText, ncxBase) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(ncxText, 'application/xml');
+    const navPoints = Array.from(doc.querySelectorAll('navPoint'));
+    const out = navPoints.map(np => {
+      const navLabel = np.querySelector('navLabel > text');
+      const content = np.querySelector('content');
+      const title = navLabel ? navLabel.textContent.trim() : null;
+      const src = content ? content.getAttribute('src') : null;
+      const href = src ? (ncxBase ? ncxBase + src : src) : null;
+      return { href, title };
+    }).filter(x => x.href);
+    return out;
+  }
+
+  function parseNavToc(navText, navBase) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(navText, 'text/html');
+    let nav = doc.querySelector('nav[epub\\:type="toc"], nav[role="doc-toc"]');
+    if (!nav) nav = doc.querySelector('nav');
+    if (!nav) return [];
+    const links = Array.from(nav.querySelectorAll('a[href]'));
+    return links.map(a => {
+      const href = a.getAttribute('href');
+      const title = a.textContent.trim();
+      return { href: (navBase ? navBase + href : href), title };
+    });
+  }
+
+  async function getChapterTitleMapAndSpine(zip, opfPath) {
+    const opfBase = opfPath ? opfPath.replace(/[^\/]+$/, '') : '';
+    const opfText = opfPath ? await zip.files[opfPath].async('text') : null;
+    let manifest = {}, spine = [], ncxHref = null;
+    if (opfText) {
+      const parsed = parseOpf(opfText, opfBase);
+      manifest = parsed.manifest;
+      spine = parsed.spine;
+      ncxHref = parsed.ncxHref;
+    }
+
+    let navEntries = [];
+    for (const id in manifest) {
+      const item = manifest[id];
+      if ((item.properties || '').includes('nav') || (/application\/xhtml\+xml/i.test(item.mediaType) && (item.href || '').toLowerCase().includes('nav'))) {
+        const navPath = item.href;
+        if (zip.files[navPath]) {
+          const navText = await zip.files[navPath].async('text');
+          const navBase = navPath.replace(/[^\/]+$/, '');
+          navEntries = parseNavToc(navText, navBase);
+          if (navEntries.length) break;
+        }
+      }
+    }
+
+    if (!navEntries.length && ncxHref && zip.files[ncxHref]) {
+      const ncxText = await zip.files[ncxHref].async('text');
+      const ncxBase = ncxHref.replace(/[^\/]+$/, '');
+      navEntries = parseNcx(ncxText, ncxBase);
+    }
+
+    const titleMap = new Map();
+    navEntries.forEach(ne => {
+      const href = ne.href.split('#')[0];
+      const normalized = href.replace(/^\.\//, '');
+      titleMap.set(normalized, ne.title);
+    });
+
+    const spineOrder = [];
+    if (spine && spine.length) {
+      spine.forEach(idref => {
+        const item = manifest[idref];
+        if (item && item.href) {
+          const href = item.href.split('#')[0].replace(/^\.\//, '');
+          spineOrder.push(href);
+          if (!titleMap.has(href)) titleMap.set(href, href.split('/').pop());
+        }
+      });
+    }
+
+    if (!spineOrder.length) {
+      Object.keys(zip.files).forEach(path => {
+        if (/\.x?html?$/i.test(path)) {
+          const normalized = path.split('#')[0].replace(/^\.\//, '');
+          if (!titleMap.has(normalized)) titleMap.set(normalized, normalized.split('/').pop());
+          spineOrder.push(normalized);
+        }
+      });
+    }
+
+    return { titleMap, spineOrder };
+  }
+
+  function isContentFile(path) {
+    const lower = path.toLowerCase();
+    if (!/\.x?html?$/i.test(path)) return false;
+    if (/nav|toc|cover|titlepage|acknowledg|contents|manifest/.test(lower)) return false;
+    return true;
+  }
+
+  /* =========================
+     Counting and extraction
+     ========================= */
+
+  async function countMatchesInFile(url, query, options = {}) {
+    const { wholeWord = true } = options;
+    try {
+      const r = await fetch(url);
+      if (!r.ok) return { ok:false, error:`HTTP ${r.status}` };
+      const ab = await r.arrayBuffer();
+      const zip = await JSZip.loadAsync(ab);
+
+      const opfPath = await findOpfPath(zip);
+      const { titleMap, spineOrder } = await getChapterTitleMapAndSpine(zip, opfPath);
+
+      const htmlPaths = spineOrder.filter(p => isContentFile(p) && zip.files[p]);
+
+      const qEsc = escapeRegExp(query);
+      const reGlobal = wholeWord ? new RegExp(`\\b(${qEsc})\\b`, 'gi') : new RegExp(`(${qEsc})`, 'gi');
+
+      const chapters = [];
+      let totalMatches = 0;
+
+      for (const name of htmlPaths) {
+        const entry = zip.files[name];
+        if (!entry || entry.dir) continue;
+        const raw = await entry.async('text');
+
+        const stripped = raw.replace(/<br\s*\/?>/gi, '. ')
+                            .replace(/<\/p>/gi, '. ')
+                            .replace(/<[^>]+>/g, ' ')
+                            .replace(/\s+/g, ' ')
+                            .trim();
+        if (!stripped) continue;
+
+        const matches = Array.from(stripped.matchAll(reGlobal));
+        const chapterTotalMatches = matches.length;
+        if (chapterTotalMatches === 0) continue;
+
+        const friendly = titleMap.get(name) || name.split('/').pop();
+        chapters.push({ name: friendly, path: name, chapterTotalMatches });
+        totalMatches += chapterTotalMatches;
+      }
+
+      return { ok:true, chapters, totalMatches };
+    } catch (err) {
+      return { ok:false, error: err?.message || 'parse error' };
+    }
+  }
+
+  async function extractOccurrencesForChapter(url, chapterPath, query, options = {}) {
+    const { page = 1, pageSize = 200, wholeWord = true, maxSentenceLength = 300 } = options;
+    try {
+      const r = await fetch(url);
+      if (!r.ok) return { ok:false, error:`HTTP ${r.status}` };
+      const ab = await r.arrayBuffer();
+      const zip = await JSZip.loadAsync(ab);
+
+      const entryKey = Object.keys(zip.files).find(k => k.split('#')[0].replace(/^\.\//,'') === chapterPath);
+      if (!entryKey) return { ok:false, error:'Chapter not found in EPUB' };
+
+      const raw = await zip.files[entryKey].async('text');
+      const stripped = raw.replace(/<br\s*\/?>/gi, '. ')
+                          .replace(/<\/p>/gi, '. ')
+                          .replace(/<[^>]+>/g, ' ')
+                          .replace(/\s+/g, ' ')
+                          .trim();
+      if (!stripped) return { ok:true, occurrences: [], totalMatches:0, hasMore:false };
+
+      const qEsc = escapeRegExp(query);
+      const reGlobal = wholeWord ? new RegExp(`\\b(${qEsc})\\b`, 'gi') : new RegExp(`(${qEsc})`, 'gi');
+
+      const sentenceRe = /[^.!?]+[.!?]?/g;
+      const sentences = [];
+      let m;
+      while ((m = sentenceRe.exec(stripped)) !== null) {
+        const sentence = m[0].trim();
+        if (!sentence) continue;
+        sentences.push({ text: sentence, start: m.index, end: m.index + m[0].length });
+      }
+      if (!sentences.length) sentences.push({ text: stripped, start:0, end: stripped.length });
+
+      const matches = Array.from(stripped.matchAll(reGlobal));
+      const totalMatches = matches.length;
+
+      const occurrences = [];
+      for (let mi = 0; mi < matches.length; mi++) {
+        const match = matches[mi];
+        const matchIndex = match.index;
+        let si = 0;
+        while (si < sentences.length && !(matchIndex >= sentences[si].start && matchIndex < sentences[si].end)) si++;
+        if (si >= sentences.length) si = sentences.length - 1;
+        const prev = sentences[si - 1] ? sentences[si - 1].text.trim() : '';
+        const curr = sentences[si].text.trim();
+        const next = sentences[si + 1] ? sentences[si + 1].text.trim() : '';
+
+        const truncate = str => {
+          if (!str) return '';
+          if (str.length <= maxSentenceLength) return str;
+          return str.slice(0, maxSentenceLength) + '...';
+        };
+
+        const reSentence = wholeWord ? new RegExp(`\\b(${qEsc})\\b`, 'gi') : new RegExp(`(${qEsc})`, 'gi');
+        const matchHtml = escapeHtml(curr).replace(reSentence, '<strong>$1</strong>');
+
+        occurrences.push({
+          matchIndex,
+          prev: truncate(prev),
+          curr: truncate(curr),
+          next: truncate(next),
+          matchHtml
+        });
+      }
+
+      const start = (page - 1) * pageSize;
+      const pageItems = occurrences.slice(start, start + pageSize);
+      const hasMore = start + pageSize < occurrences.length;
+
+      return { ok:true, occurrences: pageItems, totalMatches, hasMore };
+    } catch (err) {
+      return { ok:false, error: err?.message || 'parse error' };
+    }
+  }
+
+  /* =========================
+     Rendering helpers
+     ========================= */
+
+  const modal = document.getElementById('occurrenceModal');
+  const modalTitle = document.getElementById('modalTitle');
+  const modalContent = document.getElementById('modalContent');
+  const modalClose = document.getElementById('modalClose');
+  modalClose.addEventListener('click', () => modal.style.display = 'none');
+  window.addEventListener('keydown', e => { if (e.key === 'Escape') modal.style.display = 'none'; });
+
+  function showOccurrenceModal(bookTitle, chapterName, occurrenceIndex, prev, matchHtml, next) {
+    modalTitle.textContent = `${bookTitle} — ${chapterName} — occurrence ${occurrenceIndex}`;
+    const prevHtml = prev ? `<div style="margin-bottom:.5rem;color:#444">${escapeHtml(prev)}</div>` : '';
+    const currHtml = `<div class="highlight-sentence">${matchHtml}</div>`;
+    const nextHtml = next ? `<div style="color:#444">${escapeHtml(next)}</div>` : '';
+    modalContent.innerHTML = prevHtml + currHtml + nextHtml;
+    modal.style.display = 'flex';
+  }
+
+  function collapseOtherBooks(currentCard) {
+    const auto = document.getElementById('autoCollapse').checked;
+    if (!auto) return;
+    document.querySelectorAll('#results .book-card').forEach(card => {
+      if (card !== currentCard) {
+        const occ = card.querySelector('.occ-container');
+        if (occ) occ.style.display = 'none';
+      }
+    });
+  }
+
+  // Render grouped or single-series results
+  function renderGroupedResults(container, groupedData, query) {
+    container.innerHTML = '';
+    document.getElementById('resultsControls').style.display = 'flex';
+
+    // single-series mode if exactly one series group present
+    const singleSeriesMode = groupedData.length === 1;
+
+    if (singleSeriesMode) {
+      const seriesBlock = groupedData[0];
+      seriesBlock.books.forEach(book => {
+        const bookCard = document.createElement('div');
+        bookCard.className = 'book-card';
+
+        const bookHeader = document.createElement('div');
+        bookHeader.className = 'book-header';
+        bookHeader.innerHTML = `<div><strong>${escapeHtml(book.title)}</strong><div class="book-meta">Series: ${escapeHtml(seriesBlock.seriesName)}</div></div><div class="muted">${book.counts.ok ? book.counts.totalMatches + ' match(es)' : 'Error'}</div>`;
+
+        const chaptersList = document.createElement('div');
+        chaptersList.className = 'chapters-list';
+
+        if (book.counts.ok) {
+          book.counts.chapters.forEach(ch => {
+            const chRow = document.createElement('div');
+            chRow.className = 'chapter-row';
+            chRow.innerHTML = `<div>${escapeHtml(ch.name)}</div><div class="muted">${ch.chapterTotalMatches} occurrence(s)</div>`;
+
+            const occContainer = document.createElement('div');
+            occContainer.className = 'occ-container';
+
+            chRow.addEventListener('click', async () => {
+              const open = occContainer.style.display === 'block';
+              if (!open) {
+                collapseOtherBooks(bookCard);
+                occContainer.style.display = 'block';
+                if (!occContainer.dataset.loaded) {
+                  occContainer.innerHTML = '<div class="spinner"></div>';
+                  const res = await extractOccurrencesForChapter(rawUrlForFile(book.filename), ch.path, query, { page:1, pageSize:200, wholeWord:true, maxSentenceLength:400 });
+                  occContainer.innerHTML = '';
+                  if (!res.ok) { occContainer.innerHTML = `<div class="muted">Error: ${escapeHtml(res.error||'Unknown')}</div>`; return; }
+                  res.occurrences.forEach((occ, idx) => {
+                    const occIndex = idx + 1;
+                    const btn = document.createElement('button');
+                    btn.className = 'occurrence-btn';
+                    btn.innerHTML = `<strong>Occurrence ${occIndex}</strong> — <span class="muted">${escapeHtml(occ.curr.slice(0,80))}${occ.curr.length>80?'...':''}</span>`;
+                    btn.addEventListener('click', () => showOccurrenceModal(book.title, ch.name, occIndex, occ.prev, occ.matchHtml, occ.next));
+                    occContainer.appendChild(btn);
+                  });
+                  if (res.hasMore) {
+                    const more = document.createElement('div');
+                    more.className = 'pager';
+                    const loadMore = document.createElement('button');
+                    loadMore.textContent = 'Load more';
+                    let page = 2;
+                    loadMore.addEventListener('click', async () => {
+                      loadMore.disabled = true;
+                      const r2 = await extractOccurrencesForChapter(rawUrlForFile(book.filename), ch.path, query, { page, pageSize:200, wholeWord:true, maxSentenceLength:400 });
+                      loadMore.disabled = false;
+                      if (!r2.ok) return;
+                      r2.occurrences.forEach((occ, idx) => {
+                        const occIndex = (page-1)*200 + idx + 1;
+                        const btn = document.createElement('button');
+                        btn.className = 'occurrence-btn';
+                        btn.innerHTML = `<strong>Occurrence ${occIndex}</strong> — <span class="muted">${escapeHtml(occ.curr.slice(0,80))}${occ.curr.length>80?'...':''}</span>`;
+                        btn.addEventListener('click', () => showOccurrenceModal(book.title, ch.name, occIndex, occ.prev, occ.matchHtml, occ.next));
+                        occContainer.appendChild(btn);
+                      });
+                      page++;
+                      if (!r2.hasMore) loadMore.remove();
+                    });
+                    more.appendChild(loadMore);
+                    occContainer.appendChild(more);
+                  }
+                  occContainer.dataset.loaded = '1';
+                }
+              } else {
+                occContainer.style.display = 'none';
+              }
+            });
+
+            chaptersList.appendChild(chRow);
+            chaptersList.appendChild(occContainer);
+          });
+        } else {
+          const err = document.createElement('div');
+          err.className = 'muted';
+          err.textContent = `Error reading file: ${book.counts.error || 'Unknown'}`;
+          chaptersList.appendChild(err);
+        }
+
+        bookCard.appendChild(bookHeader);
+        bookCard.appendChild(chaptersList);
+        container.appendChild(bookCard);
+      });
+      return;
+    }
+
+    // grouped mode
+    groupedData.forEach(seriesBlock => {
+      const seriesDiv = document.createElement('div');
+      seriesDiv.className = 'series-block';
+
+      const seriesHeader = document.createElement('div');
+      seriesHeader.style.display = 'flex';
+      seriesHeader.style.justifyContent = 'space-between';
+      seriesHeader.style.alignItems = 'center';
+      seriesHeader.style.cursor = 'pointer';
+      seriesHeader.innerHTML = `<div><strong>${escapeHtml(seriesBlock.seriesName)}</strong></div><div class="muted">${seriesBlock.books.reduce((s,b)=>s+(b.counts.ok?b.counts.totalMatches:0),0)} match(es)</div>`;
+
+      const booksContainer = document.createElement('div');
+      booksContainer.style.display = 'none';
+      booksContainer.style.marginTop = '.6rem';
+
+      seriesHeader.addEventListener('click', () => {
+        booksContainer.style.display = booksContainer.style.display === 'block' ? 'none' : 'block';
+      });
+
+      seriesDiv.appendChild(seriesHeader);
+      seriesDiv.appendChild(booksContainer);
+
+      seriesBlock.books.forEach(book => {
+        const bookCard = document.createElement('div');
+        bookCard.className = 'book-card';
+
+        const bookHeader = document.createElement('div');
+        bookHeader.className = 'book-header';
+        bookHeader.innerHTML = `<div><strong>${escapeHtml(book.title)}</strong><div class="book-meta">Series: ${escapeHtml(seriesBlock.seriesName)}</div></div><div class="muted">${book.counts.ok ? book.counts.totalMatches + ' match(es)' : 'Error'}</div>`;
+
+        const chaptersList = document.createElement('div');
+        chaptersList.className = 'chapters-list';
+
+        if (book.counts.ok) {
+          book.counts.chapters.forEach(ch => {
+            const chRow = document.createElement('div');
+            chRow.className = 'chapter-row';
+            chRow.innerHTML = `<div>${escapeHtml(ch.name)}</div><div class="muted">${ch.chapterTotalMatches} occurrence(s)</div>`;
+
+            const occContainer = document.createElement('div');
+            occContainer.className = 'occ-container';
+
+            chRow.addEventListener('click', async () => {
+              const open = occContainer.style.display === 'block';
+              if (!open) {
+                collapseOtherBooks(bookCard);
+                occContainer.style.display = 'block';
+                if (!occContainer.dataset.loaded) {
+                  occContainer.innerHTML = '<div class="spinner"></div>';
+                  const res = await extractOccurrencesForChapter(rawUrlForFile(book.filename), ch.path, query, { page:1, pageSize:200, wholeWord:true, maxSentenceLength:400 });
+                  occContainer.innerHTML = '';
+                  if (!res.ok) { occContainer.innerHTML = `<div class="muted">Error: ${escapeHtml(res.error||'Unknown')}</div>`; return; }
+                  res.occurrences.forEach((occ, idx) => {
+                    const occIndex = idx + 1;
+                    const btn = document.createElement('button');
+                    btn.className = 'occurrence-btn';
+                    btn.innerHTML = `<strong>Occurrence ${occIndex}</strong> — <span class="muted">${escapeHtml(occ.curr.slice(0,80))}${occ.curr.length>80?'...':''}</span>`;
+                    btn.addEventListener('click', () => showOccurrenceModal(book.title, ch.name, occIndex, occ.prev, occ.matchHtml, occ.next));
+                    occContainer.appendChild(btn);
+                  });
+                  if (res.hasMore) {
+                    const more = document.createElement('div');
+                    more.className = 'pager';
+                    const loadMore = document.createElement('button');
+                    loadMore.textContent = 'Load more';
+                    let page = 2;
+                    loadMore.addEventListener('click', async () => {
+                      loadMore.disabled = true;
+                      const r2 = await extractOccurrencesForChapter(rawUrlForFile(book.filename), ch.path, query, { page, pageSize:200, wholeWord:true, maxSentenceLength:400 });
+                      loadMore.disabled = false;
+                      if (!r2.ok) return;
+                      r2.occurrences.forEach((occ, idx) => {
+                        const occIndex = (page-1)*200 + idx + 1;
+                        const btn = document.createElement('button');
+                        btn.className = 'occurrence-btn';
+                        btn.innerHTML = `<strong>Occurrence ${occIndex}</strong> — <span class="muted">${escapeHtml(occ.curr.slice(0,80))}${occ.curr.length>80?'...':''}</span>`;
+                        btn.addEventListener('click', () => showOccurrenceModal(book.title, ch.name, occIndex, occ.prev, occ.matchHtml, occ.next));
+                        occContainer.appendChild(btn);
+                      });
+                      page++;
+                      if (!r2.hasMore) loadMore.remove();
+                    });
+                    more.appendChild(loadMore);
+                    occContainer.appendChild(more);
+                  }
+                  occContainer.dataset.loaded = '1';
+                }
+              } else {
+                occContainer.style.display = 'none';
+              }
+            });
+
+            chaptersList.appendChild(chRow);
+            chaptersList.appendChild(occContainer);
+          });
+        } else {
+          const err = document.createElement('div');
+          err.className = 'muted';
+          err.textContent = `Error reading file: ${book.counts.error || 'Unknown'}`;
+          chaptersList.appendChild(err);
+        }
+
+        bookCard.appendChild(bookHeader);
+        bookCard.appendChild(chaptersList);
+        booksContainer.appendChild(bookCard);
+      });
+
+      container.appendChild(seriesDiv);
+    });
+  }
+
+  /* =========================
+     Selection helpers and grouping logic (fixed)
+     ========================= */
+
+  function getSelection(){
+    // collect series first
+    const selectedSeries = Array.from(document.querySelectorAll('.series-parent:checked')).map(cb => cb.dataset.series);
+    const selectedAuthors = Array.from(document.querySelectorAll('.author:checked')).map(cb => cb.value);
+
+    // collect books but filter out any book whose series is selected (so series selection wins)
+    const rawSelectedBooks = Array.from(document.querySelectorAll('.book:checked')).map(cb => ({ title: cb.value, series: cb.dataset.series }));
+    const filteredBooks = rawSelectedBooks.filter(b => !selectedSeries.includes(b.series));
+
+    return { selectedBooks: filteredBooks, selectedSeries, selectedAuthors };
+  }
+
+  function buildGroupedTargets(selection) {
+    const { selectedBooks, selectedSeries, selectedAuthors } = selection;
+    const authorSeries = selectedAuthors.flatMap(a => authorsMap[a] || []);
+    const seriesSet = new Set([...selectedSeries, ...authorSeries]);
+
+    const grouped = [];
+    // include series selections (all books)
+    seriesSet.forEach(seriesName => {
+      const books = (catalog[seriesName] || []).map(title => ({ title, filename: fileForTitle(title) }));
+      grouped.push({ seriesName, books });
+    });
+
+    // include individually selected books whose series is not selected
+    const bySeries = {};
+    selectedBooks.forEach(b => {
+      if (!bySeries[b.series]) bySeries[b.series] = [];
+      bySeries[b.series].push({ title: b.title, filename: fileForTitle(b.title) });
+    });
+    Object.keys(bySeries).forEach(seriesName => {
+      grouped.push({ seriesName, books: bySeries[seriesName] });
+    });
+
+    return grouped;
+  }
+
+  const SOLITARY_BLOCK = new Set(['.', ',', '\'', '"']);
+  function isSolitaryBlocked(query) {
+    if (!query) return false;
+    const trimmed = query.trim();
+    return trimmed.length === 1 && SOLITARY_BLOCK.has(trimmed);
+  }
+
+  /* =========================
+     Results controls (Expand/Collapse only affect results)
+     ========================= */
+
+  document.getElementById('expandAllResults').addEventListener('click', () => {
+    document.querySelectorAll('#results .occ-container, #results .chapters-list').forEach(el => el.style.display = 'block');
+    document.querySelectorAll('#results .dropdown-content').forEach(el => el.style.display = 'block');
+  });
+  document.getElementById('collapseAllResults').addEventListener('click', () => {
+    document.querySelectorAll('#results .occ-container, #results .chapters-list').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('#results .dropdown-content').forEach(el => el.style.display = 'none');
+  });
+
+  /* =========================
+     Enter key triggers search only when input length >= 2
+     ========================= */
+
+  const searchInput = document.getElementById('searchQuery');
+  const searchBtn = document.getElementById('searchBtn');
+
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      const v = searchInput.value.trim();
+      if (v.length > 1) {
+        e.preventDefault();
+        searchBtn.click();
+      }
+    }
+  });
+
+  /* =========================
+     Main search flow
+     ========================= */
+
+  searchBtn.addEventListener('click', async () => {
+    const queryRaw = searchInput.value.trim();
+    const resultsDiv = document.getElementById('results');
+
+    if (isSolitaryBlocked(queryRaw)) {
+      resultsDiv.innerHTML = `<p class="muted" style="color:#b00020">Error: Searching for a solitary punctuation character is not allowed. Please enter a real word or phrase.</p>`;
+      return;
+    }
+
+    const aliasKey = queryRaw.toLowerCase();
+    const aliasResolved = aliases[aliasKey] || null;
+
+    const selection = getSelection();
+    if (aliasResolved && !selection.selectedBooks.length && !selection.selectedSeries.length && !selection.selectedAuthors.length) {
+      const series = Object.keys(catalog).find(s => catalog[s].includes(aliasResolved));
+      if (series) selection.selectedBooks.push({ title: aliasResolved, series });
+    }
+
+    const nothingSelected = !selection.selectedBooks.length && !selection.selectedSeries.length && !selection.selectedAuthors.length;
+    if (nothingSelected){
+      resultsDiv.innerHTML = `<p class="muted" style="color:#b00020">Error: Please choose a series, book, or author to search.</p>`;
+      return;
+    }
+    if (!queryRaw){
+      resultsDiv.innerHTML = `<p class="muted" style="color:#b00020">Error: Please enter a search term.</p>`;
+      return;
+    }
+
+    // show results controls
+    document.getElementById('resultsControls').style.display = 'flex';
+    resultsDiv.innerHTML = '<div class="spinner"></div>';
+
+    const groupedTargets = buildGroupedTargets(selection);
+    const groupedData = [];
+    let grandTotal = 0;
+
+    for (const seriesBlock of groupedTargets) {
+      const booksWithCounts = [];
+      for (const b of seriesBlock.books) {
+        const url = rawUrlForFile(b.filename);
+        const counts = await countMatchesInFile(url, queryRaw, { wholeWord: true });
+        booksWithCounts.push({ title: b.title, filename: b.filename, counts });
+        if (counts.ok) grandTotal += counts.totalMatches;
+      }
+      groupedData.push({ seriesName: seriesBlock.seriesName, books: booksWithCounts });
+    }
+
+    // header summary
+    const selectedBookTitles = selection.selectedBooks.map(b => b.title);
+    const selectedSeriesNames = selection.selectedSeries.slice();
+    const authorSeries = selection.selectedAuthors.flatMap(a => authorsMap[a] || []);
+    authorSeries.forEach(s => { if (!selectedSeriesNames.includes(s)) selectedSeriesNames.push(s); });
+    const summaryParts = [];
+    if (selectedBookTitles.length) summaryParts.push(`Books searched: ${selectedBookTitles.join(', ')}`);
+    if (selectedSeriesNames.length) summaryParts.push(`Series searched: ${selectedSeriesNames.join(', ')}`);
+    const summaryText = summaryParts.join(' | ');
+    const limit = 150;
+    const truncated = summaryText.length > limit ? summaryText.slice(0, limit) + '...' : summaryText;
+
+    let html = `<h2>Search Results</h2><p>Query: <strong>${escapeHtml(queryRaw)}</strong></p>`;
+    if (summaryText) {
+      if (summaryText.length > limit) {
+        html += `<p id="summaryPreview">${escapeHtml(truncated)}</p><button id="showMoreBtn" class="small">Show more</button>`;
+      } else {
+        html += `<p>${escapeHtml(summaryText)}</p>`;
+      }
+    }
+    html += `<p class="muted">Total matches: ${grandTotal}</p>`;
+    resultsDiv.innerHTML = html;
+
+    const container = document.createElement('div');
+    resultsDiv.appendChild(container);
+
+    renderGroupedResults(container, groupedData, queryRaw);
+
+    const showMoreBtn = document.getElementById('showMoreBtn');
+    if (showMoreBtn) {
+      showMoreBtn.addEventListener('click', () => {
+        document.getElementById('summaryPreview').textContent = summaryText;
+        showMoreBtn.remove();
+      });
+    }
+  });
+  </script>
+</body>
+</html>
