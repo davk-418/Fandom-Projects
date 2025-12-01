@@ -2,9 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Book Searcher — Fixed UI</title>
+  <title>Book Searcher — Full</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <!-- Restored font -->
   <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.0/jszip.min.js"></script>
   <style>
@@ -16,24 +15,48 @@
     .resizer::before{content:"⇔";font-size:12px;color:#999}
     .main{flex:1;padding:1.25rem;overflow:auto}
     h1,h2,h3{margin:0 0 .5rem 0}
+
     .controls{display:flex;gap:.5rem;margin:.5rem 0 1rem;flex-wrap:wrap}
     .controls button,.controls input{padding:.45rem .7rem;border:1px solid #d6d6d6;border-radius:6px;background:#fff;cursor:pointer;font-size:.9rem}
     .search-filter{width:100%;padding:.5rem;border:1px solid #d6d6d6;border-radius:6px;margin-bottom:.75rem;font-size:.9rem}
+
     .dropdown{margin-bottom:.9rem}
     .dropdown-header{display:flex;align-items:center;gap:.5rem;padding:.35rem;border-radius:6px;background:#f3f3f3;cursor:pointer}
     .dropdown-header:hover{background:#eef}
     .arrow{width:18px;text-align:center;display:inline-block}
-    .dropdown-content{display:none;margin-top:.4rem;padding-left:1rem}
-    .author-btn{display:inline-flex;align-items:center;gap:.4rem;padding:.25rem .6rem;border-radius:16px;border:1px solid #ddd;background:#fff;margin:.2rem;font-size:.82rem;cursor:pointer}
+    .dropdown-content{display:none;margin-top:.4rem;padding-left:0.25rem}
+
+    .dropdown-content label{
+      display:block;
+      margin:0.3rem 0;
+      padding-left:1rem;
+      border-radius:6px;
+      transition:background 0.2s ease;
+    }
+    .dropdown-content label:hover{ background:#eef; }
+    .dropdown-content label.selected{ background:#dbe9ff; }
+
+    .authors-section{margin-top:1rem}
+    .authors-header{font-weight:700;margin:0.5rem 0}
+    .author-btn{
+      display:block;
+      margin:0.3rem 0;
+      padding-left:1rem;
+      border-radius:6px;
+      transition:background 0.2s ease;
+    }
+    .author-btn:hover{ background:#eef; }
+    .author-btn.selected{ background:#dbe9ff; }
+
     .search-bar{width:60%;padding:.6rem;border:1px solid #d6d6d6;border-radius:6px;font-size:.95rem;margin-right:.5rem}
     .search-btn{padding:.6rem .9rem;border-radius:6px;border:1px solid #d6d6d6;background:var(--accent);color:#fff;cursor:pointer}
+
     #results{margin-top:1rem}
     .spinner{border:4px solid #f3f3f3;border-top:4px solid var(--accent);border-radius:50%;width:30px;height:30px;animation:spin 1s linear infinite;margin:1rem auto}
     @keyframes spin{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
     .series-block{margin-bottom:1rem;border:1px solid var(--border);border-radius:8px;padding:.6rem;background:#fff}
     .book-card{margin:0.6rem 0;padding:.6rem;border-radius:8px;border:1px solid #f0f0f0;background:linear-gradient(180deg,#fff,#fbfdff)}
-    .book-card + .book-card{margin-top:0.8rem}
-    .book-header{display:flex;justify-content:space-between;align-items:center;gap:.6rem;cursor:pointer}
+    .book-header{display:flex;justify-content:space-between;align-items:center;gap:.6rem}
     .book-meta{font-size:.86rem;color:var(--muted)}
     .chapters-list{margin-top:.5rem;padding-left:.6rem}
     .chapter-row{display:flex;justify-content:space-between;align-items:center;padding:.35rem;border-radius:6px;background:#f7f7f7;margin:.35rem 0;cursor:pointer}
@@ -42,9 +65,10 @@
     .highlight-sentence{background:#e6f0ff;padding:.6rem;border-radius:6px;margin-bottom:.5rem}
     .muted{color:var(--muted);font-size:.9rem}
     .controls-results{display:flex;gap:.5rem;align-items:center;margin-bottom:.75rem}
-    .divider{height:1px;background:var(--border);margin:.6rem 0;border-radius:2px}
-    .small-muted{font-size:.85rem;color:#777}
-    .toggle{display:inline-flex;align-items:center;gap:.4rem}
+
+    #expandAllResults,#collapseAllResults{
+      padding:.6rem .9rem;border-radius:6px;border:1px solid #d6d6d6;background:var(--accent);color:#fff;cursor:pointer
+    }
   </style>
 </head>
 <body>
@@ -58,8 +82,8 @@
       </div>
       <div id="seriesList"></div>
 
-      <div style="margin-top:1rem">
-        <h3>Search by author?</h3>
+      <div class="authors-section" id="authorsSection">
+        <div class="authors-header">Authors</div>
         <div id="authorList"></div>
       </div>
     </aside>
@@ -74,16 +98,9 @@
         <button id="searchBtn" class="search-btn">Search</button>
       </div>
 
-      <!-- Results controls (in results area only) -->
       <div id="resultsControls" style="display:none" class="controls-results">
-        <div>
-          <button id="expandAllResults">Expand All</button>
-          <button id="collapseAllResults">Collapse All</button>
-        </div>
-        <div style="margin-left:auto" class="toggle">
-          <label class="small-muted">Auto-collapse other books</label>
-          <input id="autoCollapse" type="checkbox" title="When opening a book, collapse other open books" />
-        </div>
+        <button id="expandAllResults">Expand All</button>
+        <button id="collapseAllResults">Collapse All</button>
       </div>
 
       <div id="results"></div>
@@ -146,20 +163,25 @@
     "kotlc book 9.5": "Unraveled"
   };
 
+  /* =========================
+     Paths
+     ========================= */
   const REPO_OWNER = 'davk-418';
   const REPO_NAME = 'Fandom-Projects';
   const REPO_BRANCH = 'main';
   const RAW_BASE = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REPO_BRANCH}`;
+  const FILES_BASE = `${RAW_BASE}/files`; // repo-root/files
 
   function fileForTitle(title){ return `${title}.epub`; }
-  function rawUrlForFile(filename){ return `${RAW_BASE}/${encodeURIComponent(filename)}`; }
+  function rawUrlForFile(filename){ return `${FILES_BASE}/${encodeURIComponent(filename)}`; }
 
   function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function escapeRegExp(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
   function cssEscape(s){ return s.replace(/"/g,'\\"'); }
+  function pluralize(count, word){ return count===1 ? `${count} ${word}` : `${count} ${word}s`; }
 
   /* =========================
-     Sidebar build
+     Sidebar: series dropdowns
      ========================= */
   const seriesList = document.getElementById('seriesList');
   Object.keys(catalog).forEach(series => {
@@ -175,6 +197,11 @@
     catalog[series].forEach(book => {
       const label = document.createElement('label');
       label.innerHTML = `<input type="checkbox" class="book" value="${escapeHtml(book)}" data-series="${escapeHtml(series)}"> ${escapeHtml(book)}`;
+      const input = label.querySelector('input.book');
+      input.addEventListener('change', () => {
+        if (input.checked) label.classList.add('selected');
+        else label.classList.remove('selected');
+      });
       content.appendChild(label);
     });
 
@@ -191,42 +218,59 @@
     seriesList.appendChild(wrapper);
   });
 
-  // authors
+  /* =========================
+     Sidebar: authors
+     ========================= */
   const authorList = document.getElementById('authorList');
   authors.forEach(author => {
     const label = document.createElement('label');
     label.className = 'author-btn';
     label.innerHTML = `<input type="checkbox" class="author" value="${escapeHtml(author)}"> ${escapeHtml(author)}`;
+    const input = label.querySelector('input.author');
+
+    input.addEventListener('change', () => {
+      if (input.checked) label.classList.add('selected');
+      else label.classList.remove('selected');
+
+      const seriesByAuthor = authorsMap[author] || [];
+      seriesByAuthor.forEach(series => {
+        const parent = document.querySelector(`.series-parent[data-series="${cssEscape(series)}"]`);
+        if (parent) {
+          parent.checked = input.checked;
+          parent.dispatchEvent(new Event('change'));
+        }
+      });
+    });
+
     authorList.appendChild(label);
   });
 
-  // interactions
+  /* =========================
+     Sidebar interactions
+     ========================= */
   seriesList.addEventListener('change', e => {
     if (e.target.classList.contains('series-parent')) {
       const series = e.target.dataset.series;
       const books = seriesList.querySelectorAll(`.book[data-series="${cssEscape(series)}"]`);
-      books.forEach(cb => cb.checked = e.target.checked);
+      books.forEach(cb => {
+        cb.checked = e.target.checked;
+        cb.dispatchEvent(new Event('change'));
+      });
     }
   });
 
   document.getElementById('selectAll').addEventListener('click', () => {
-    document.querySelectorAll('.series-parent, .book').forEach(cb => cb.checked = true);
-  });
-  document.getElementById('deselectAll').addEventListener('click', () => {
-    document.querySelectorAll('.series-parent, .book').forEach(cb => cb.checked = false);
+    document.querySelectorAll('.series-parent, .book, .author').forEach(cb => {
+      cb.checked = true;
+      cb.dispatchEvent(new Event('change'));
+    });
   });
 
-  authorList.addEventListener('change', e => {
-    if (e.target.classList.contains('author')) {
-      const author = e.target.value;
-      const seriesByAuthor = authorsMap[author] || [];
-      seriesByAuthor.forEach(series => {
-        const parent = document.querySelector(`.series-parent[data-series="${cssEscape(series)}"]`);
-        if (parent) parent.checked = e.target.checked;
-        const books = document.querySelectorAll(`.book[data-series="${cssEscape(series)}"]`);
-        books.forEach(cb => cb.checked = e.target.checked);
-      });
-    }
+  document.getElementById('deselectAll').addEventListener('click', () => {
+    document.querySelectorAll('.series-parent, .book, .author').forEach(cb => {
+      cb.checked = false;
+      cb.dispatchEvent(new Event('change'));
+    });
   });
 
   document.getElementById('seriesSearch').addEventListener('input', e => {
@@ -251,9 +295,8 @@
   })();
 
   /* =========================
-     EPUB helpers (unchanged)
+     EPUB helpers
      ========================= */
-
   async function findOpfPath(zip) {
     const containerPath = 'META-INF/container.xml';
     if (!zip.files[containerPath]) return null;
@@ -291,7 +334,7 @@
     const parser = new DOMParser();
     const doc = parser.parseFromString(ncxText, 'application/xml');
     const navPoints = Array.from(doc.querySelectorAll('navPoint'));
-    const out = navPoints.map(np => {
+    return navPoints.map(np => {
       const navLabel = np.querySelector('navLabel > text');
       const content = np.querySelector('content');
       const title = navLabel ? navLabel.textContent.trim() : null;
@@ -299,7 +342,6 @@
       const href = src ? (ncxBase ? ncxBase + src : src) : null;
       return { href, title };
     }).filter(x => x.href);
-    return out;
   }
 
   function parseNavToc(navText, navBase) {
@@ -368,7 +410,7 @@
 
     if (!spineOrder.length) {
       Object.keys(zip.files).forEach(path => {
-        if (/\.x?html?$/i.test(path)) {
+        if (/\.xhtml?$/i.test(path)) {
           const normalized = path.split('#')[0].replace(/^\.\//, '');
           if (!titleMap.has(normalized)) titleMap.set(normalized, normalized.split('/').pop());
           spineOrder.push(normalized);
@@ -381,21 +423,35 @@
 
   function isContentFile(path) {
     const lower = path.toLowerCase();
-    if (!/\.x?html?$/i.test(path)) return false;
+    if (!/\.xhtml?$/i.test(path)) return false;
     if (/nav|toc|cover|titlepage|acknowledg|contents|manifest/.test(lower)) return false;
     return true;
   }
 
   /* =========================
-     Counting and extraction
+     Regex builder: whole-word with punctuation-safe boundaries
      ========================= */
+  function buildQueryRegex(query, wholeWord = true) {
+    const qEsc = escapeRegExp(query);
+    const isAlnumOnly = /^[A-Za-z0-9]+$/.test(query);
+    if (!wholeWord) return new RegExp(`(${qEsc})`, 'gi');
+    // If query is purely alphanumeric, use \b boundaries
+    if (isAlnumOnly) return new RegExp(`\\b(${qEsc})\\b`, 'gi');
+    // Otherwise, emulate word boundaries around the query's ends using lookarounds that respect A–Z, a–z, 0–9
+    return new RegExp(`(?<![A-Za-z0-9])(${qEsc})(?![A-Za-z0-9])`, 'gi');
+  }
 
+  /* =========================
+     Counting and error handling
+     ========================= */
   async function countMatchesInFile(url, query, options = {}) {
     const { wholeWord = true } = options;
     try {
       const r = await fetch(url);
-      if (!r.ok) return { ok:false, error:`HTTP ${r.status}` };
+      if (!r.ok) return { ok:false, error:`File not found (HTTP ${r.status})` };
       const ab = await r.arrayBuffer();
+      if (!ab || ab.byteLength < 100) return { ok:false, error:"Corrupted or empty EPUB file" };
+
       const zip = await JSZip.loadAsync(ab);
 
       const opfPath = await findOpfPath(zip);
@@ -403,11 +459,11 @@
 
       const htmlPaths = spineOrder.filter(p => isContentFile(p) && zip.files[p]);
 
-      const qEsc = escapeRegExp(query);
-      const reGlobal = wholeWord ? new RegExp(`\\b(${qEsc})\\b`, 'gi') : new RegExp(`(${qEsc})`, 'gi');
+      const reGlobal = buildQueryRegex(query, wholeWord);
 
       const chapters = [];
       let totalMatches = 0;
+      let chapterIndex = 0;
 
       for (const name of htmlPaths) {
         const entry = zip.files[name];
@@ -423,11 +479,16 @@
 
         const matches = Array.from(stripped.matchAll(reGlobal));
         const chapterTotalMatches = matches.length;
-        if (chapterTotalMatches === 0) continue;
 
-        const friendly = titleMap.get(name) || name.split('/').pop();
-        chapters.push({ name: friendly, path: name, chapterTotalMatches });
-        totalMatches += chapterTotalMatches;
+        const fallbackTitle = `Chapter ${++chapterIndex}`;
+        const friendly = (titleMap.get(name) || '').trim() || fallbackTitle;
+
+        if (chapterTotalMatches > 0) {
+          chapters.push({ name: friendly, path: name, chapterTotalMatches });
+          totalMatches += chapterTotalMatches;
+        } else {
+          // Include chapters with 0 occurrences if you prefer showing them; currently we omit them intentionally
+        }
       }
 
       return { ok:true, chapters, totalMatches };
@@ -437,11 +498,12 @@
   }
 
   async function extractOccurrencesForChapter(url, chapterPath, query, options = {}) {
-    const { page = 1, pageSize = 200, wholeWord = true, maxSentenceLength = 300 } = options;
+    const { page = 1, pageSize = 200, wholeWord = true, maxSentenceLength = 400 } = options;
     try {
       const r = await fetch(url);
-      if (!r.ok) return { ok:false, error:`HTTP ${r.status}` };
+      if (!r.ok) return { ok:false, error:`File not found (HTTP ${r.status})` };
       const ab = await r.arrayBuffer();
+      if (!ab || ab.byteLength < 100) return { ok:false, error:"Corrupted or empty EPUB file" };
       const zip = await JSZip.loadAsync(ab);
 
       const entryKey = Object.keys(zip.files).find(k => k.split('#')[0].replace(/^\.\//,'') === chapterPath);
@@ -455,8 +517,7 @@
                           .trim();
       if (!stripped) return { ok:true, occurrences: [], totalMatches:0, hasMore:false };
 
-      const qEsc = escapeRegExp(query);
-      const reGlobal = wholeWord ? new RegExp(`\\b(${qEsc})\\b`, 'gi') : new RegExp(`(${qEsc})`, 'gi');
+      const reGlobal = buildQueryRegex(query, wholeWord);
 
       const sentenceRe = /[^.!?]+[.!?]?/g;
       const sentences = [];
@@ -488,8 +549,8 @@
           return str.slice(0, maxSentenceLength) + '...';
         };
 
-        const reSentence = wholeWord ? new RegExp(`\\b(${qEsc})\\b`, 'gi') : new RegExp(`(${qEsc})`, 'gi');
-        const matchHtml = escapeHtml(curr).replace(reSentence, '<strong>$1</strong>');
+        // Highlight within the current sentence using the same regex
+        const matchHtml = escapeHtml(curr).replace(reGlobal, '<strong>$1</strong>');
 
         occurrences.push({
           matchIndex,
@@ -511,258 +572,25 @@
   }
 
   /* =========================
-     Rendering helpers
+     Results controls: Expand/Collapse All
      ========================= */
-
-  const modal = document.getElementById('occurrenceModal');
-  const modalTitle = document.getElementById('modalTitle');
-  const modalContent = document.getElementById('modalContent');
-  const modalClose = document.getElementById('modalClose');
-  modalClose.addEventListener('click', () => modal.style.display = 'none');
-  window.addEventListener('keydown', e => { if (e.key === 'Escape') modal.style.display = 'none'; });
-
-  function showOccurrenceModal(bookTitle, chapterName, occurrenceIndex, prev, matchHtml, next) {
-    modalTitle.textContent = `${bookTitle} — ${chapterName} — occurrence ${occurrenceIndex}`;
-    const prevHtml = prev ? `<div style="margin-bottom:.5rem;color:#444">${escapeHtml(prev)}</div>` : '';
-    const currHtml = `<div class="highlight-sentence">${matchHtml}</div>`;
-    const nextHtml = next ? `<div style="color:#444">${escapeHtml(next)}</div>` : '';
-    modalContent.innerHTML = prevHtml + currHtml + nextHtml;
-    modal.style.display = 'flex';
-  }
-
-  function collapseOtherBooks(currentCard) {
-    const auto = document.getElementById('autoCollapse').checked;
-    if (!auto) return;
-    document.querySelectorAll('#results .book-card').forEach(card => {
-      if (card !== currentCard) {
-        const occ = card.querySelector('.occ-container');
-        if (occ) occ.style.display = 'none';
-      }
-    });
-  }
-
-  // Render grouped or single-series results
-  function renderGroupedResults(container, groupedData, query) {
-    container.innerHTML = '';
-    document.getElementById('resultsControls').style.display = 'flex';
-
-    // single-series mode if exactly one series group present
-    const singleSeriesMode = groupedData.length === 1;
-
-    if (singleSeriesMode) {
-      const seriesBlock = groupedData[0];
-      seriesBlock.books.forEach(book => {
-        const bookCard = document.createElement('div');
-        bookCard.className = 'book-card';
-
-        const bookHeader = document.createElement('div');
-        bookHeader.className = 'book-header';
-        bookHeader.innerHTML = `<div><strong>${escapeHtml(book.title)}</strong><div class="book-meta">Series: ${escapeHtml(seriesBlock.seriesName)}</div></div><div class="muted">${book.counts.ok ? book.counts.totalMatches + ' match(es)' : 'Error'}</div>`;
-
-        const chaptersList = document.createElement('div');
-        chaptersList.className = 'chapters-list';
-
-        if (book.counts.ok) {
-          book.counts.chapters.forEach(ch => {
-            const chRow = document.createElement('div');
-            chRow.className = 'chapter-row';
-            chRow.innerHTML = `<div>${escapeHtml(ch.name)}</div><div class="muted">${ch.chapterTotalMatches} occurrence(s)</div>`;
-
-            const occContainer = document.createElement('div');
-            occContainer.className = 'occ-container';
-
-            chRow.addEventListener('click', async () => {
-              const open = occContainer.style.display === 'block';
-              if (!open) {
-                collapseOtherBooks(bookCard);
-                occContainer.style.display = 'block';
-                if (!occContainer.dataset.loaded) {
-                  occContainer.innerHTML = '<div class="spinner"></div>';
-                  const res = await extractOccurrencesForChapter(rawUrlForFile(book.filename), ch.path, query, { page:1, pageSize:200, wholeWord:true, maxSentenceLength:400 });
-                  occContainer.innerHTML = '';
-                  if (!res.ok) { occContainer.innerHTML = `<div class="muted">Error: ${escapeHtml(res.error||'Unknown')}</div>`; return; }
-                  res.occurrences.forEach((occ, idx) => {
-                    const occIndex = idx + 1;
-                    const btn = document.createElement('button');
-                    btn.className = 'occurrence-btn';
-                    btn.innerHTML = `<strong>Occurrence ${occIndex}</strong> — <span class="muted">${escapeHtml(occ.curr.slice(0,80))}${occ.curr.length>80?'...':''}</span>`;
-                    btn.addEventListener('click', () => showOccurrenceModal(book.title, ch.name, occIndex, occ.prev, occ.matchHtml, occ.next));
-                    occContainer.appendChild(btn);
-                  });
-                  if (res.hasMore) {
-                    const more = document.createElement('div');
-                    more.className = 'pager';
-                    const loadMore = document.createElement('button');
-                    loadMore.textContent = 'Load more';
-                    let page = 2;
-                    loadMore.addEventListener('click', async () => {
-                      loadMore.disabled = true;
-                      const r2 = await extractOccurrencesForChapter(rawUrlForFile(book.filename), ch.path, query, { page, pageSize:200, wholeWord:true, maxSentenceLength:400 });
-                      loadMore.disabled = false;
-                      if (!r2.ok) return;
-                      r2.occurrences.forEach((occ, idx) => {
-                        const occIndex = (page-1)*200 + idx + 1;
-                        const btn = document.createElement('button');
-                        btn.className = 'occurrence-btn';
-                        btn.innerHTML = `<strong>Occurrence ${occIndex}</strong> — <span class="muted">${escapeHtml(occ.curr.slice(0,80))}${occ.curr.length>80?'...':''}</span>`;
-                        btn.addEventListener('click', () => showOccurrenceModal(book.title, ch.name, occIndex, occ.prev, occ.matchHtml, occ.next));
-                        occContainer.appendChild(btn);
-                      });
-                      page++;
-                      if (!r2.hasMore) loadMore.remove();
-                    });
-                    more.appendChild(loadMore);
-                    occContainer.appendChild(more);
-                  }
-                  occContainer.dataset.loaded = '1';
-                }
-              } else {
-                occContainer.style.display = 'none';
-              }
-            });
-
-            chaptersList.appendChild(chRow);
-            chaptersList.appendChild(occContainer);
-          });
-        } else {
-          const err = document.createElement('div');
-          err.className = 'muted';
-          err.textContent = `Error reading file: ${book.counts.error || 'Unknown'}`;
-          chaptersList.appendChild(err);
-        }
-
-        bookCard.appendChild(bookHeader);
-        bookCard.appendChild(chaptersList);
-        container.appendChild(bookCard);
-      });
-      return;
-    }
-
-    // grouped mode
-    groupedData.forEach(seriesBlock => {
-      const seriesDiv = document.createElement('div');
-      seriesDiv.className = 'series-block';
-
-      const seriesHeader = document.createElement('div');
-      seriesHeader.style.display = 'flex';
-      seriesHeader.style.justifyContent = 'space-between';
-      seriesHeader.style.alignItems = 'center';
-      seriesHeader.style.cursor = 'pointer';
-      seriesHeader.innerHTML = `<div><strong>${escapeHtml(seriesBlock.seriesName)}</strong></div><div class="muted">${seriesBlock.books.reduce((s,b)=>s+(b.counts.ok?b.counts.totalMatches:0),0)} match(es)</div>`;
-
-      const booksContainer = document.createElement('div');
-      booksContainer.style.display = 'none';
-      booksContainer.style.marginTop = '.6rem';
-
-      seriesHeader.addEventListener('click', () => {
-        booksContainer.style.display = booksContainer.style.display === 'block' ? 'none' : 'block';
-      });
-
-      seriesDiv.appendChild(seriesHeader);
-      seriesDiv.appendChild(booksContainer);
-
-      seriesBlock.books.forEach(book => {
-        const bookCard = document.createElement('div');
-        bookCard.className = 'book-card';
-
-        const bookHeader = document.createElement('div');
-        bookHeader.className = 'book-header';
-        bookHeader.innerHTML = `<div><strong>${escapeHtml(book.title)}</strong><div class="book-meta">Series: ${escapeHtml(seriesBlock.seriesName)}</div></div><div class="muted">${book.counts.ok ? book.counts.totalMatches + ' match(es)' : 'Error'}</div>`;
-
-        const chaptersList = document.createElement('div');
-        chaptersList.className = 'chapters-list';
-
-        if (book.counts.ok) {
-          book.counts.chapters.forEach(ch => {
-            const chRow = document.createElement('div');
-            chRow.className = 'chapter-row';
-            chRow.innerHTML = `<div>${escapeHtml(ch.name)}</div><div class="muted">${ch.chapterTotalMatches} occurrence(s)</div>`;
-
-            const occContainer = document.createElement('div');
-            occContainer.className = 'occ-container';
-
-            chRow.addEventListener('click', async () => {
-              const open = occContainer.style.display === 'block';
-              if (!open) {
-                collapseOtherBooks(bookCard);
-                occContainer.style.display = 'block';
-                if (!occContainer.dataset.loaded) {
-                  occContainer.innerHTML = '<div class="spinner"></div>';
-                  const res = await extractOccurrencesForChapter(rawUrlForFile(book.filename), ch.path, query, { page:1, pageSize:200, wholeWord:true, maxSentenceLength:400 });
-                  occContainer.innerHTML = '';
-                  if (!res.ok) { occContainer.innerHTML = `<div class="muted">Error: ${escapeHtml(res.error||'Unknown')}</div>`; return; }
-                  res.occurrences.forEach((occ, idx) => {
-                    const occIndex = idx + 1;
-                    const btn = document.createElement('button');
-                    btn.className = 'occurrence-btn';
-                    btn.innerHTML = `<strong>Occurrence ${occIndex}</strong> — <span class="muted">${escapeHtml(occ.curr.slice(0,80))}${occ.curr.length>80?'...':''}</span>`;
-                    btn.addEventListener('click', () => showOccurrenceModal(book.title, ch.name, occIndex, occ.prev, occ.matchHtml, occ.next));
-                    occContainer.appendChild(btn);
-                  });
-                  if (res.hasMore) {
-                    const more = document.createElement('div');
-                    more.className = 'pager';
-                    const loadMore = document.createElement('button');
-                    loadMore.textContent = 'Load more';
-                    let page = 2;
-                    loadMore.addEventListener('click', async () => {
-                      loadMore.disabled = true;
-                      const r2 = await extractOccurrencesForChapter(rawUrlForFile(book.filename), ch.path, query, { page, pageSize:200, wholeWord:true, maxSentenceLength:400 });
-                      loadMore.disabled = false;
-                      if (!r2.ok) return;
-                      r2.occurrences.forEach((occ, idx) => {
-                        const occIndex = (page-1)*200 + idx + 1;
-                        const btn = document.createElement('button');
-                        btn.className = 'occurrence-btn';
-                        btn.innerHTML = `<strong>Occurrence ${occIndex}</strong> — <span class="muted">${escapeHtml(occ.curr.slice(0,80))}${occ.curr.length>80?'...':''}</span>`;
-                        btn.addEventListener('click', () => showOccurrenceModal(book.title, ch.name, occIndex, occ.prev, occ.matchHtml, occ.next));
-                        occContainer.appendChild(btn);
-                      });
-                      page++;
-                      if (!r2.hasMore) loadMore.remove();
-                    });
-                    more.appendChild(loadMore);
-                    occContainer.appendChild(more);
-                  }
-                  occContainer.dataset.loaded = '1';
-                }
-              } else {
-                occContainer.style.display = 'none';
-              }
-            });
-
-            chaptersList.appendChild(chRow);
-            chaptersList.appendChild(occContainer);
-          });
-        } else {
-          const err = document.createElement('div');
-          err.className = 'muted';
-          err.textContent = `Error reading file: ${book.counts.error || 'Unknown'}`;
-          chaptersList.appendChild(err);
-        }
-
-        bookCard.appendChild(bookHeader);
-        bookCard.appendChild(chaptersList);
-        booksContainer.appendChild(bookCard);
-      });
-
-      container.appendChild(seriesDiv);
-    });
-  }
+  document.getElementById('expandAllResults').addEventListener('click', () => {
+    document.querySelectorAll('#results .chapters-list').forEach(el => el.style.display = 'block');
+    document.querySelectorAll('#results .occ-container').forEach(el => el.style.display = 'block');
+  });
+  document.getElementById('collapseAllResults').addEventListener('click', () => {
+    document.querySelectorAll('#results .occ-container').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('#results .chapters-list').forEach(el => el.style.display = 'none');
+  });
 
   /* =========================
-     Selection helpers and grouping logic (fixed)
+     Selection helpers and grouping
      ========================= */
-
   function getSelection(){
-    // collect series first
     const selectedSeries = Array.from(document.querySelectorAll('.series-parent:checked')).map(cb => cb.dataset.series);
     const selectedAuthors = Array.from(document.querySelectorAll('.author:checked')).map(cb => cb.value);
-
-    // collect books but filter out any book whose series is selected (so series selection wins)
     const rawSelectedBooks = Array.from(document.querySelectorAll('.book:checked')).map(cb => ({ title: cb.value, series: cb.dataset.series }));
     const filteredBooks = rawSelectedBooks.filter(b => !selectedSeries.includes(b.series));
-
     return { selectedBooks: filteredBooks, selectedSeries, selectedAuthors };
   }
 
@@ -772,13 +600,11 @@
     const seriesSet = new Set([...selectedSeries, ...authorSeries]);
 
     const grouped = [];
-    // include series selections (all books)
     seriesSet.forEach(seriesName => {
       const books = (catalog[seriesName] || []).map(title => ({ title, filename: fileForTitle(title) }));
       grouped.push({ seriesName, books });
     });
 
-    // include individually selected books whose series is not selected
     const bySeries = {};
     selectedBooks.forEach(b => {
       if (!bySeries[b.series]) bySeries[b.series] = [];
@@ -791,76 +617,44 @@
     return grouped;
   }
 
-  const SOLITARY_BLOCK = new Set(['.', ',', '\'', '"']);
-  function isSolitaryBlocked(query) {
-    if (!query) return false;
-    const trimmed = query.trim();
-    return trimmed.length === 1 && SOLITARY_BLOCK.has(trimmed);
-  }
-
   /* =========================
-     Results controls (Expand/Collapse only affect results)
+     Main search flow (with punctuation guard)
      ========================= */
-
-  document.getElementById('expandAllResults').addEventListener('click', () => {
-    document.querySelectorAll('#results .occ-container, #results .chapters-list').forEach(el => el.style.display = 'block');
-    document.querySelectorAll('#results .dropdown-content').forEach(el => el.style.display = 'block');
-  });
-  document.getElementById('collapseAllResults').addEventListener('click', () => {
-    document.querySelectorAll('#results .occ-container, #results .chapters-list').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('#results .dropdown-content').forEach(el => el.style.display = 'none');
-  });
-
-  /* =========================
-     Enter key triggers search only when input length >= 2
-     ========================= */
-
   const searchInput = document.getElementById('searchQuery');
   const searchBtn = document.getElementById('searchBtn');
+  const resultsDiv = document.getElementById('results');
 
   searchInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       const v = searchInput.value.trim();
-      if (v.length > 1) {
+      if (v.length > 0) {
         e.preventDefault();
         searchBtn.click();
       }
     }
   });
 
-  /* =========================
-     Main search flow
-     ========================= */
-
   searchBtn.addEventListener('click', async () => {
     const queryRaw = searchInput.value.trim();
-    const resultsDiv = document.getElementById('results');
 
-    if (isSolitaryBlocked(queryRaw)) {
-      resultsDiv.innerHTML = `<p class="muted" style="color:#b00020">Error: Searching for a solitary punctuation character is not allowed. Please enter a real word or phrase.</p>`;
-      return;
-    }
-
-    const aliasKey = queryRaw.toLowerCase();
-    const aliasResolved = aliases[aliasKey] || null;
-
-    const selection = getSelection();
-    if (aliasResolved && !selection.selectedBooks.length && !selection.selectedSeries.length && !selection.selectedAuthors.length) {
-      const series = Object.keys(catalog).find(s => catalog[s].includes(aliasResolved));
-      if (series) selection.selectedBooks.push({ title: aliasResolved, series });
-    }
-
-    const nothingSelected = !selection.selectedBooks.length && !selection.selectedSeries.length && !selection.selectedAuthors.length;
-    if (nothingSelected){
-      resultsDiv.innerHTML = `<p class="muted" style="color:#b00020">Error: Please choose a series, book, or author to search.</p>`;
-      return;
-    }
     if (!queryRaw){
       resultsDiv.innerHTML = `<p class="muted" style="color:#b00020">Error: Please enter a search term.</p>`;
       return;
     }
 
-    // show results controls
+    // Block queries that are only a single punctuation/symbol (e.g., ".", ",", "?" with optional spaces)
+    if (/^[\p{P}\p{S}]$/u.test(queryRaw)) {
+      resultsDiv.innerHTML = `<p class="muted" style="color:#b00020">Error: Queries cannot be only a single symbol.</p>`;
+      return;
+    }
+
+    const selection = getSelection();
+    const nothingSelected = !selection.selectedBooks.length && !selection.selectedSeries.length && !selection.selectedAuthors.length;
+    if (nothingSelected){
+      resultsDiv.innerHTML = `<p class="muted" style="color:#b00020">Error: Please choose a series, book, or author to search.</p>`;
+      return;
+    }
+
     document.getElementById('resultsControls').style.display = 'flex';
     resultsDiv.innerHTML = '<div class="spinner"></div>';
 
@@ -879,42 +673,154 @@
       groupedData.push({ seriesName: seriesBlock.seriesName, books: booksWithCounts });
     }
 
-    // header summary
-    const selectedBookTitles = selection.selectedBooks.map(b => b.title);
-    const selectedSeriesNames = selection.selectedSeries.slice();
-    const authorSeries = selection.selectedAuthors.flatMap(a => authorsMap[a] || []);
-    authorSeries.forEach(s => { if (!selectedSeriesNames.includes(s)) selectedSeriesNames.push(s); });
-    const summaryParts = [];
-    if (selectedBookTitles.length) summaryParts.push(`Books searched: ${selectedBookTitles.join(', ')}`);
-    if (selectedSeriesNames.length) summaryParts.push(`Series searched: ${selectedSeriesNames.join(', ')}`);
-    const summaryText = summaryParts.join(' | ');
-    const limit = 150;
-    const truncated = summaryText.length > limit ? summaryText.slice(0, limit) + '...' : summaryText;
-
     let html = `<h2>Search Results</h2><p>Query: <strong>${escapeHtml(queryRaw)}</strong></p>`;
-    if (summaryText) {
-      if (summaryText.length > limit) {
-        html += `<p id="summaryPreview">${escapeHtml(truncated)}</p><button id="showMoreBtn" class="small">Show more</button>`;
-      } else {
-        html += `<p>${escapeHtml(summaryText)}</p>`;
-      }
-    }
-    html += `<p class="muted">Total matches: ${grandTotal}</p>`;
+    html += `<p class="muted">${pluralize(grandTotal,'match')}</p>`;
     resultsDiv.innerHTML = html;
 
     const container = document.createElement('div');
     resultsDiv.appendChild(container);
 
     renderGroupedResults(container, groupedData, queryRaw);
+  });
 
-    const showMoreBtn = document.getElementById('showMoreBtn');
-    if (showMoreBtn) {
-      showMoreBtn.addEventListener('click', () => {
-        document.getElementById('summaryPreview').textContent = summaryText;
-        showMoreBtn.remove();
+  /* =========================
+     Render results (single-series mode, show zero-match series with valid files, show errors, pluralization)
+     ========================= */
+  function renderGroupedResults(container, groupedData, query) {
+    container.innerHTML = '';
+
+    if (groupedData.length === 1) {
+      const seriesBlock = groupedData[0];
+      seriesBlock.books.forEach(book => renderBook(container, seriesBlock.seriesName, book, query));
+      return;
+    }
+
+    groupedData.forEach(seriesBlock => {
+      const totalMatches = seriesBlock.books.reduce((s,b)=>s+(b.counts.ok?b.counts.totalMatches:0),0);
+      const anyValidFile = seriesBlock.books.some(b => b.counts.ok);
+      const anyErrors = seriesBlock.books.some(b => !b.counts.ok);
+
+      // Skip series only if there are neither valid files nor errors (i.e., nothing to show)
+      if (!anyValidFile && !anyErrors) return;
+
+      const seriesDiv = document.createElement('div');
+      seriesDiv.className = 'series-block';
+
+      let headerRight;
+      if (!anyValidFile && anyErrors) {
+        headerRight = 'Error: files missing';
+      } else {
+        headerRight = pluralize(totalMatches, 'match'); // show 0 matches if valid files but no hits
+      }
+
+      const seriesHeader = document.createElement('div');
+      seriesHeader.style.display = 'flex';
+      seriesHeader.style.justifyContent = 'space-between';
+      seriesHeader.style.alignItems = 'center';
+      seriesHeader.style.cursor = 'pointer';
+      seriesHeader.innerHTML = `<div><strong>${escapeHtml(seriesBlock.seriesName)}</strong></div><div class="muted">${escapeHtml(headerRight)}</div>`;
+
+      const booksContainer = document.createElement('div');
+      booksContainer.style.display = 'none';
+      booksContainer.style.marginTop = '.6rem';
+
+      seriesHeader.addEventListener('click', () => {
+        booksContainer.style.display = booksContainer.style.display === 'block' ? 'none' : 'block';
+      });
+
+      seriesDiv.appendChild(seriesHeader);
+      seriesDiv.appendChild(booksContainer);
+
+      seriesBlock.books.forEach(book => renderBook(booksContainer, seriesBlock.seriesName, book, query));
+
+      container.appendChild(seriesDiv);
+    });
+  }
+
+  function renderBook(container, seriesName, book, query) {
+    const bookCard = document.createElement('div');
+    bookCard.className = 'book-card';
+
+    const bookHeader = document.createElement('div');
+    bookHeader.className = 'book-header';
+
+    if (book.counts.ok) {
+      bookHeader.innerHTML = `<div><strong>${escapeHtml(book.title)}</strong><div class="book-meta">Series: ${escapeHtml(seriesName)}</div></div><div class="muted">${pluralize(book.counts.totalMatches,'match')}</div>`;
+    } else {
+      bookHeader.innerHTML = `<div><strong>${escapeHtml(book.title)}</strong><div class="book-meta">Series: ${escapeHtml(seriesName)}</div></div><div class="muted">Error: ${escapeHtml(book.counts.error||'Unknown')}</div>`;
+    }
+
+    const chaptersList = document.createElement('div');
+    chaptersList.className = 'chapters-list';
+    chaptersList.style.display = 'none';
+
+    if (book.counts.ok) {
+      book.counts.chapters.forEach(ch => {
+        const chRow = document.createElement('div');
+        chRow.className = 'chapter-row';
+        chRow.innerHTML = `<div>${escapeHtml(ch.name)}</div><div class="muted">${pluralize(ch.chapterTotalMatches,'occurrence')}</div>`;
+
+        const occContainer = document.createElement('div');
+        occContainer.className = 'occ-container';
+        occContainer.style.display = 'none';
+
+        chRow.addEventListener('click', async () => {
+          const open = occContainer.style.display === 'block';
+          if (!open) {
+            occContainer.style.display = 'block';
+            if (!occContainer.dataset.loaded) {
+              occContainer.innerHTML = '<div class="spinner"></div>';
+              const res = await extractOccurrencesForChapter(rawUrlForFile(book.filename), ch.path, query, { page:1, pageSize:200, wholeWord:true, maxSentenceLength:400 });
+              occContainer.innerHTML = '';
+              if (!res.ok) { occContainer.innerHTML = `<div class="muted">Error: ${escapeHtml(res.error||'Unknown')}</div>`; return; }
+              res.occurrences.forEach((occ, idx) => {
+                const occIndex = idx + 1;
+                const btn = document.createElement('button');
+                btn.className = 'occurrence-btn';
+                btn.innerHTML = `<strong>Occurrence ${occIndex}</strong> — <span class="muted">${escapeHtml(occ.curr.slice(0,80))}${occ.curr.length>80?'...':''}</span>`;
+                btn.addEventListener('click', () => showOccurrenceModal(book.title, ch.name, occIndex, occ.prev, occ.matchHtml, occ.next));
+                occContainer.appendChild(btn);
+              });
+              occContainer.dataset.loaded = '1';
+            }
+          } else {
+            occContainer.style.display = 'none';
+          }
+        });
+
+        chaptersList.appendChild(chRow);
+        chaptersList.appendChild(occContainer);
       });
     }
-  });
+
+    bookHeader.addEventListener('click', () => {
+      const open = chaptersList.style.display === 'block';
+      chaptersList.style.display = open ? 'none' : 'block';
+    });
+
+    bookCard.appendChild(bookHeader);
+    bookCard.appendChild(chaptersList);
+    container.appendChild(bookCard);
+  }
+
+  /* =========================
+     Modal helpers
+     ========================= */
+  const modal = document.getElementById('occurrenceModal');
+  const modalTitle = document.getElementById('modalTitle');
+  const modalContent = document.getElementById('modalContent');
+  const modalClose = document.getElementById('modalClose');
+  modalClose.addEventListener('click', () => modal.style.display = 'none');
+  window.addEventListener('keydown', e => { if (e.key === 'Escape') modal.style.display = 'none'; });
+
+  function showOccurrenceModal(bookTitle, chapterName, occurrenceIndex, prev, matchHtml, next) {
+    modalTitle.textContent = `${bookTitle} — ${chapterName} — occurrence ${occurrenceIndex}`;
+    const prevHtml = prev ? `<div style="margin-bottom:.5rem;color:#444">${escapeHtml(prev)}</div>` : '';
+    const currHtml = `<div class="highlight-sentence">${matchHtml}</div>`;
+    const nextHtml = next ? `<div style="color:#444">${escapeHtml(next)}</div>` : '';
+    modalContent.innerHTML = prevHtml + currHtml + nextHtml;
+    modal.style.display = 'flex';
+  }
   </script>
 </body>
 </html>
