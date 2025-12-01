@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Book Searcher — Full</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.0/jszip.min.js"></script>
+  <style>
+    :root{--bg:#fff;--muted:#666;--border:#e6e6e6;--accent:#0b5fff}
+    html,body{height:100%;margin:0;font-family:"Merriweather",serif;background:var(--bg);color:#111}
+    .app{display:flex;height:100vh;overflow:hidden}
+    .sidebar{background:#fafafa;border-right:1px solid var(--border);padding:1rem;min-width:220px;max-width:520px;flex:0 0 300px;overflow:auto}
+    .resizer{width:6px;cursor:col-resize;background:var(--border);display:flex;align-items:center;justify-content:center}
+    .resizer::before{content:"⇔";font-size:12px;color:#999}
+    .main{flex:1;padding:1.25rem;overflow:auto}
+    h1,h2,h3{margin:0 0 .5rem 0}
+
+    .controls{display:flex;gap:.5rem;margin:.5rem 0 1rem;flex-wrap:wrap}
+    .controls button,.controls input{padding:.45rem .7rem;border:1px solid #d6d6d6;border-radius:6px;background:#fff;cursor:pointer;font-size:.9rem}
+    .search-filter{width:100%;padding:.5rem;border:1px solid #d6d6d6;border-radius:6px;margin-bottom:.75rem;font-size:.9rem}
+
+    .dropdown{margin-bottom:.9rem}
+    .dropdown-header{display:flex;align-items:center;gap:.5rem;padding:.35rem;border-radius:6px;background:#f3f3f3;cursor:pointer}
+    .dropdown-header:hover{background:#eef}
+    .arrow{width:18px;text-align:center;display:inline-block}
+    .dropdown-content{display:none;margin-top:.4rem;padding-left:0.25rem}
+
+    .dropdown-content label{
+      display:block;
+      margin:0.3rem 0;
+      padding-left:1rem;
+      border-radius:6px;
+      transition:background 0.2s ease;
+    }
+    .dropdown-content label:hover{ background:#eef; }
+    .dropdown-content label.selected{ background:#dbe9ff; }
+
+    .authors-section{margin-top:1rem}
+    .authors-header{font-weight:700;margin:0.5rem 0}
+    .author-btn{
+      display:block;
+      margin:0.3rem 0;
+      padding-left:1rem;
+      border-radius:6px;
+      transition:background 0.2s ease;
+    }
+    .author-btn:hover{ background:#eef; }
+    .author-btn.selected{ background:#dbe9ff; }
+
+    .search-bar{width:60%;padding:.6rem;border:1px solid #d6d6d6;border-radius:6px;font-size:.95rem;margin-right:.5rem}
+    .search-btn{padding:.6rem .9rem;border-radius:6px;border:1px solid #d6d6d6;background:var(--accent);color:#fff;cursor:pointer}
+
+    #results{margin-top:1rem}
+    .spinner{border:4px solid #f3f3f3;border-top:4px solid var(--accent);border-radius:50%;width:30px;height:30px;animation:spin 1s linear infinite;margin:1rem auto}
+    @keyframes spin{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
+    .series-block{margin-bottom:1rem;border:1px solid var(--border);border-radius:8px;padding:.6rem;background:#fff}
+    .book-card{margin:0.6rem 0;padding:.6rem;border-radius:8px;border:1px solid #f0f0f0;background:linear-gradient(180deg,#fff,#fbfdff)}
+    .book-header{display:flex;justify-content:space-between;align-items:center;gap:.6rem}
+    .book-meta{font-size:.86rem;color:var(--muted)}
+    .chapters-list{margin-top:.5rem;padding-left:.6rem}
+    .chapter-row{display:flex;justify-content:space-between;align-items:center;padding:.35rem;border-radius:6px;background:#f7f7f7;margin:.35rem 0;cursor:pointer}
+    .occ-container{display:none;padding-left:.6rem;margin-top:.4rem}
+    .occurrence-btn{display:block;width:100%;text-align:left;margin:.2rem 0;padding:.45rem;border:1px solid #eee;background:#fff;border-radius:6px}
+    .highlight-sentence{background:#e6f0ff;padding:.6rem;border-radius:6px;margin-bottom:.5rem}
+    .muted{color:var(--muted);font-size:.9rem}
+    .controls-results{display:flex;gap:.5rem;align-items:center;margin-bottom:.75rem}
+
+    #expandAllResults,#collapseAllResults{
+      padding:.6rem .9rem;border-radius:6px;border:1px solid #d6d6d6;background:var(--accent);color:#fff;cursor:pointer
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <h2>Series</h2>
+      <input id="seriesSearch" class="search-filter" placeholder="Filter series..." />
+      <div class="controls">
+        <button id="selectAll">Select All</button>
+        <button id="deselectAll">Deselect All</button>
+      </div>
+      <div id="seriesList"></div>
+
+      <div class="authors-section" id="authorsSection">
+        <div class="authors-header">Authors</div>
+        <div id="authorList"></div>
+      </div>
+    </aside>
+
+    <div class="resizer" id="resizer" title="Drag to resize"></div>
+
+    <main class="main">
+      <h1>Book Searcher</h1>
+
+      <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem">
+        <input id="searchQuery" class="search-bar" placeholder="Enter a word or phrase" />
+        <button id="searchBtn" class="search-btn">Search</button>
+      </div>
+
+      <div id="resultsControls" style="display:none" class="controls-results">
+        <button id="expandAllResults">Expand All</button>
+        <button id="collapseAllResults">Collapse All</button>
+      </div>
+
+      <div id="results"></div>
+    </main>
+  </div>
+
+  <!-- Modal -->
+  <div id="occurrenceModal" aria-hidden="true" style="display:none;position:fixed;left:0;top:0;width:100%;height:100%;align-items:center;justify-content:center;background:rgba(0,0,0,0.45);z-index:9999">
+    <div style="max-width:900px;width:92%;background:#fff;border-radius:8px;padding:1rem;box-shadow:0 8px 30px rgba(0,0,0,0.3);overflow:auto;max-height:80vh">
+      <button id="modalClose" style="float:right;margin-left:.5rem">Close</button>
+      <div id="modalTitle" style="font-weight:700;margin-bottom:.5rem"></div>
+      <div id="modalContent" style="font-size:1rem;line-height:1.5"></div>
+    </div>
+  </div>
+
+  <script>
+  /* =========================
+     Catalog, authors, aliases
+     ========================= */
+  const catalog = {
+    "Percy Jackson and the Olympians": ["The Lightning Thief","The Sea of Monsters","The Titan's Curse","The Battle of the Labyrinth","The Last Olympian"],
+    "The Hero of Olympus": ["The Lost Hero","The Son of Neptune","The Mark of Athena","The House of Hades","The Blood of Olympus"],
+    "The Trials of Apollo": ["The Hidden Oracle","The Dark Prophecy","The Burning Maze","The Tyrant's Tomb","The Tower of Nero"],
+    "The Kane Chronicles": ["The Red Pyramid","The Throne of Fire","The Serpent's Shadow"],
+    "Keepers of the Lost Cities": ["Keeper of the Lost Cities","Exile","Everblaze","Neverseen","Lodestar","Nightfall","Flashback","Legacy","Unlocked","Stellarlune","Unraveled"],
+    "The Lunar Chronicles": ["Cinder","Scarlet","Cress","Winter","Fairest"],
+    "Shadow and Bone": ["Shadow and Bone","Siege and Storm","Ruin and Rising"],
+    "Six of Crows": ["Six of Crows","Crooked Kingdom"],
+    "King of Scars": ["King of Scars","Rule of Wolves"],
+    "Heartless": ["Heartless"],
+    "Prison Healer": ["The Prison Healer","The Gilded Cage","The Blood Traitor"],
+    "Mysterious Benedict Society": ["The Mysterious Benedict Society","The Perilous Journey","The Prisoner's Dilemma","The Riddle of Ages"],
+    "Renegades": ["Renegades","Archenemies","Supernova"],
+    "Raven Scholar": ["Raven Scholar"],
+    "Sky Fall Trilogy": ["Let the Sky Fall","Let the Storm Break","Let the Wind Rise"]
+  };
+
+  const authorsMap = {
+    "Rick Riordan": ["Percy Jackson and the Olympians","The Hero of Olympus","The Trials of Apollo","The Kane Chronicles"],
+    "Shannon Messenger": ["Keepers of the Lost Cities","Sky Fall Trilogy"],
+    "Marissa Meyer": ["The Lunar Chronicles","Heartless","Renegades"],
+    "Leigh Bardugo": ["Shadow and Bone","Six of Crows","King of Scars"],
+    "Lynette Noni": ["Prison Healer"],
+    "Trenton Lee Stewart": ["Mysterious Benedict Society"],
+    "Antonia Hodgson": ["Raven Scholar"]
+  };
+  const authors = Object.keys(authorsMap);
+
+  const aliases = {
+    "kotlc 1": "Keeper of the Lost Cities",
+    "kotlc 2": "Exile",
+    "kotlc 3": "Everblaze",
+    "kotlc 4": "Neverseen",
+    "kotlc 5": "Lodestar",
+    "kotlc 6": "Nightfall",
+    "kotlc 7": "Flashback",
+    "kotlc 8": "Legacy",
+    "kotlc 8.5": "Unlocked",
+    "kotlc book 9": "Stellarlune",
+    "kotlc book 9.5": "Unraveled"
+  };
+
+  /* =========================
+     Paths
+     ========================= */
+  const REPO_OWNER = 'davk-418';
+  const REPO_NAME = 'Fandom-Projects';
+  const REPO_BRANCH = 'main';
+  const RAW_BASE = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REPO_BRANCH}`;
+  const FILES_BASE = `${RAW_BASE}/files`; // repo-root/files
+
+  function fileForTitle(title){ return `${title}.epub`; }
+  function rawUrlForFile(filename){ return `${FILES_BASE}/${encodeURIComponent(filename)}`; }
+
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function escapeRegExp(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  function cssEscape(s){ return s.replace(/"/g,'\\"'); }
+  function pluralize(count, word){ return count===1 ? `${count} ${word}` : `${count} ${word}s`; }
+
+  /* =========================
+     Sidebar: series dropdowns
+     ========================= */
+  const seriesList = document.getElementById('seriesList');
+  Object.keys(catalog).forEach(series => {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'dropdown';
+
+    const header = document.createElement('div');
+    header.className = 'dropdown-header';
+    header.innerHTML = `<span class="arrow">▶</span><input type="checkbox" class="series-parent" data-series="${escapeHtml(series)}"> ${escapeHtml(series)}`;
+
+    const content = document.createElement('div');
+    content.className = 'dropdown-content';
+    catalog[series].forEach(book => {
+      const label = document.createElement('label');
+      label.innerHTML = `<input type="checkbox" class="book" value="${escapeHtml(book)}" data-series="${escapeHtml(series)}"> ${escapeHtml(book)}`;
+      const input = label.querySelector('input.book');
+      input.addEventListener('change', () => {
+        if (input.checked) label.classList.add('selected');
+        else label.classList.remove('selected');
+      });
+      content.appendChild(label);
+    });
+
+    header.addEventListener('click', e => {
+      if (e.target.tagName !== 'INPUT') {
+        const open = content.style.display === 'block';
+        content.style.display = open ? 'none' : 'block';
+        header.querySelector('.arrow').textContent = open ? '▶' : '▼';
+      }
+    });
+
+    wrapper.appendChild(header);
+    wrapper.appendChild(content);
+    seriesList.appendChild(wrapper);
+  });
+
+  /* =========================
+     Sidebar: authors
+     ========================= */
+  const authorList = document.getElementById('authorList');
+  authors.forEach(author => {
+    const label = document.createElement('label');
+    label.className = 'author-btn';
+    label.innerHTML = `<input type="checkbox" class="author" value="${escapeHtml(author)}"> ${escapeHtml(author)}`;
+    const input = label.querySelector('input.author');
+
+    input.addEventListener('change', () => {
+      if (input.checked) label.classList.add('selected');
+      else label.classList.remove('selected');
+
+      const seriesByAuthor = authorsMap[author] || [];
+      seriesByAuthor.forEach(series => {
+        const parent = document.querySelector(`.series-parent[data-series="${cssEscape(series)}"]`);
+        if (parent) {
+          parent.checked = input.checked;
+          parent.dispatchEvent(new Event('change'));
+        }
+      });
+    });
+
+    authorList.appendChild(label);
+  });
+
+  /* =========================
+     Sidebar interactions
+     ========================= */
+  seriesList.addEventListener('change', e => {
+    if (e.target.classList.contains('series-parent')) {
+      const series = e.target.dataset.series;
+      const books = seriesList.querySelectorAll(`.book[data-series="${cssEscape(series)}"]`);
+      books.forEach(cb => {
+        cb.checked = e.target.checked;
+        cb.dispatchEvent(new Event('change'));
+      });
+    }
+  });
+
+  document.getElementById('selectAll').addEventListener('click', () => {
+    document.querySelectorAll('.series-parent, .book, .author').forEach(cb => {
+      cb.checked = true;
+      cb.dispatchEvent(new Event('change'));
+    });
+  });
+
+  document.getElementById('deselectAll').addEventListener('click', () => {
+    document.querySelectorAll('.series-parent, .book, .author').forEach(cb => {
+      cb.checked = false;
+      cb.dispatchEvent(new Event('change'));
+    });
+  });
+
+  document.getElementById('seriesSearch').addEventListener('input', e => {
+    const q = e.target.value.trim().toLowerCase();
+    document.querySelectorAll('#seriesList .dropdown').forEach(dropdown => {
+      const headerText = dropdown.querySelector('.dropdown-header').textContent.toLowerCase();
+      dropdown.style.display = headerText.includes(q) ? 'block' : 'none';
+    });
+  });
+
+  (function(){
+    const resizer = document.getElementById('resizer');
+    const sidebar = document.getElementById('sidebar');
+    let dragging = false;
+    resizer.addEventListener('mousedown', () => { dragging = true; document.body.style.cursor = 'col-resize'; });
+    document.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      const newW = e.clientX;
+      if (newW > 200 && newW < 800) sidebar.style.flex = `0 0 ${newW}px`;
+    });
+    document.addEventListener('mouseup', () => { dragging = false; document.body.style.cursor = ''; });
+  })();
+
+  /* =========================
+     EPUB helpers
+     ========================= */
+  async function findOpfPath(zip) {
+    const containerPath = 'META-INF/container.xml';
+    if (!zip.files[containerPath]) return null;
+    const containerText = await zip.files[containerPath].async('text');
+    const m = containerText.match(/full-path=["']([^"']+)["']/i);
+    return m ? m[1] : null;
+  }
+
+  function parseOpf(opfText, opfBase) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(opfText, 'application/xml');
+    const manifest = {};
+    const manifestNodes = doc.querySelectorAll('manifest > item');
+    manifestNodes.forEach(item => {
+      const id = item.getAttribute('id');
+      const href = item.getAttribute('href');
+      const mediaType = item.getAttribute('media-type') || '';
+      manifest[id] = { href: (opfBase ? opfBase + href : href), mediaType, properties: item.getAttribute('properties') || '' };
+    });
+    const spine = [];
+    doc.querySelectorAll('spine > itemref').forEach(ir => {
+      const idref = ir.getAttribute('idref');
+      spine.push(idref);
+    });
+    let ncxHref = null;
+    const ncxItem = Array.from(manifestNodes).find(i => {
+      const mt = i.getAttribute('media-type');
+      return mt && /application\/x-dtbncx\+xml/i.test(mt);
+    });
+    if (ncxItem) ncxHref = (opfBase ? opfBase + ncxItem.getAttribute('href') : ncxItem.getAttribute('href'));
+    return { manifest, spine, ncxHref };
+  }
+
+  function parseNcx(ncxText, ncxBase) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(ncxText, 'application/xml');
+    const navPoints = Array.from(doc.querySelectorAll('navPoint'));
+    return navPoints.map(np => {
+      const navLabel = np.querySelector('navLabel > text');
+      const content = np.querySelector('content');
+      const title = navLabel ? navLabel.textContent.trim() : null;
+      const src = content ? content.getAttribute('src') : null;
+      const href = src ? (ncxBase ? ncxBase + src : src) : null;
+      return { href, title };
+    }).filter(x => x.href);
+  }
+
+  function parseNavToc(navText, navBase) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(navText, 'text/html');
+    let nav = doc.querySelector('nav[epub\\:type="toc"], nav[role="doc-toc"]');
+    if (!nav) nav = doc.querySelector('nav');
+    if (!nav) return [];
+    const links = Array.from(nav.querySelectorAll('a[href]'));
+    return links.map(a => {
+      const href = a.getAttribute('href');
+      const title = a.textContent.trim();
+      return { href: (navBase ? navBase + href : href), title };
+    });
+  }
+
+  async function getChapterTitleMapAndSpine(zip, opfPath) {
+    const opfBase = opfPath ? opfPath.replace(/[^\/]+$/, '') : '';
+    const opfText = opfPath ? await zip.files[opfPath].async('text') : null;
+    let manifest = {}, spine = [], ncxHref = null;
+    if (opfText) {
+      const parsed = parseOpf(opfText, opfBase);
+      manifest = parsed.manifest;
+      spine = parsed.spine;
+      ncxHref = parsed.ncxHref;
+    }
+
+    let navEntries = [];
+    for (const id in manifest) {
+      const item = manifest[id];
+      if ((item.properties || '').includes('nav') || (/application\/xhtml\+xml/i.test(item.mediaType) && (item.href || '').toLowerCase().includes('nav'))) {
+        const navPath = item.href;
+        if (zip.files[navPath]) {
+          const navText = await zip.files[navPath].async('text');
+          const navBase = navPath.replace(/[^\/]+$/, '');
+          navEntries = parseNavToc(navText, navBase);
+          if (navEntries.length) break;
+        }
+      }
+    }
+
+    if (!navEntries.length && ncxHref && zip.files[ncxHref]) {
+      const ncxText = await zip.files[ncxHref].async('text');
+      const ncxBase = ncxHref.replace(/[^\/]+$/, '');
+      navEntries = parseNcx(ncxText, ncxBase);
+    }
+
+    const titleMap = new Map();
+    navEntries.forEach(ne => {
+      const href = ne.href.split('#')[0];
+      const normalized = href.replace(/^\.\//, '');
+      titleMap.set(normalized, ne.title);
+    });
+
+    const spineOrder = [];
+    if (spine && spine.length) {
+      spine.forEach(idref => {
+        const item = manifest[idref];
+        if (item && item.href) {
+          const href = item.href.split('#')[0].replace(/^\.\//, '');
+          spineOrder.push(href);
+          if (!titleMap.has(href)) titleMap.set(href, href.split('/').pop());
+        }
+      });
+    }
+
+    if (!spineOrder.length) {
+      Object.keys(zip.files).forEach(path => {
+        if (/\.xhtml?$/i.test(path)) {
+          const normalized = path.split('#')[0].replace(/^\.\//, '');
+          if (!titleMap.has(normalized)) titleMap.set(normalized, normalized.split('/').pop());
+          spineOrder.push(normalized);
+        }
+      });
+    }
+
+    return { titleMap, spineOrder };
+  }
+
+  function isContentFile(path) {
+    const lower = path.toLowerCase();
+    if (!/\.xhtml?$/i.test(path)) return false;
+    if (/nav|toc|cover|titlepage|acknowledg|contents|manifest/.test(lower)) return false;
+    return true;
+  }
+
+  /* =========================
+     Regex builder: whole-word with punctuation-safe boundaries
+     ========================= */
+  function buildQueryRegex(query, wholeWord = true) {
+    const qEsc = escapeRegExp(query);
+    const isAlnumOnly = /^[A-Za-z0-9]+$/.test(query);
+    if (!wholeWord) return new RegExp(`(${qEsc})`, 'gi');
+    // If query is purely alphanumeric, use \b boundaries
+    if (isAlnumOnly) return new RegExp(`\\b(${qEsc})\\b`, 'gi');
+    // Otherwise, emulate word boundaries around the query's ends using lookarounds that respect A–Z, a–z, 0–9
+    return new RegExp(`(?<![A-Za-z0-9])(${qEsc})(?![A-Za-z0-9])`, 'gi');
+  }
+
+  /* =========================
+     Counting and error handling
+     ========================= */
+  async function countMatchesInFile(url, query, options = {}) {
+    const { wholeWord = true } = options;
+    try {
+      const r = await fetch(url);
+      if (!r.ok) return { ok:false, error:`File not found (HTTP ${r.status})` };
+      const ab = await r.arrayBuffer();
+      if (!ab || ab.byteLength < 100) return { ok:false, error:"Corrupted or empty EPUB file" };
+
+      const zip = await JSZip.loadAsync(ab);
+
+      const opfPath = await findOpfPath(zip);
+      const { titleMap, spineOrder } = await getChapterTitleMapAndSpine(zip, opfPath);
+
+      const htmlPaths = spineOrder.filter(p => isContentFile(p) && zip.files[p]);
+
+      const reGlobal = buildQueryRegex(query, wholeWord);
+
+      const chapters = [];
+      let totalMatches = 0;
+      let chapterIndex = 0;
+
+      for (const name of htmlPaths) {
+        const entry = zip.files[name];
+        if (!entry || entry.dir) continue;
+        const raw = await entry.async('text');
+
+        const stripped = raw.replace(/<br\s*\/?>/gi, '. ')
+                            .replace(/<\/p>/gi, '. ')
+                            .replace(/<[^>]+>/g, ' ')
+                            .replace(/\s+/g, ' ')
+                            .trim();
+        if (!stripped) continue;
+
+        const matches = Array.from(stripped.matchAll(reGlobal));
+        const chapterTotalMatches = matches.length;
+
+        const fallbackTitle = `Chapter ${++chapterIndex}`;
+        const friendly = (titleMap.get(name) || '').trim() || fallbackTitle;
+
+        if (chapterTotalMatches > 0) {
+          chapters.push({ name: friendly, path: name, chapterTotalMatches });
+          totalMatches += chapterTotalMatches;
+        } else {
+          // Include chapters with 0 occurrences if you prefer showing them; currently we omit them intentionally
+        }
+      }
+
+      return { ok:true, chapters, totalMatches };
+    } catch (err) {
+      return { ok:false, error: err?.message || 'parse error' };
+    }
+  }
+
+  async function extractOccurrencesForChapter(url, chapterPath, query, options = {}) {
+    const { page = 1, pageSize = 200, wholeWord = true, maxSentenceLength = 400 } = options;
+    try {
+      const r = await fetch(url);
+      if (!r.ok) return { ok:false, error:`File not found (HTTP ${r.status})` };
+      const ab = await r.arrayBuffer();
+      if (!ab || ab.byteLength < 100) return { ok:false, error:"Corrupted or empty EPUB file" };
+      const zip = await JSZip.loadAsync(ab);
+
+      const entryKey = Object.keys(zip.files).find(k => k.split('#')[0].replace(/^\.\//,'') === chapterPath);
+      if (!entryKey) return { ok:false, error:'Chapter not found in EPUB' };
+
+      const raw = await zip.files[entryKey].async('text');
+      const stripped = raw.replace(/<br\s*\/?>/gi, '. ')
+                          .replace(/<\/p>/gi, '. ')
+                          .replace(/<[^>]+>/g, ' ')
+                          .replace(/\s+/g, ' ')
+                          .trim();
+      if (!stripped) return { ok:true, occurrences: [], totalMatches:0, hasMore:false };
+
+      const reGlobal = buildQueryRegex(query, wholeWord);
+
+      const sentenceRe = /[^.!?]+[.!?]?/g;
+      const sentences = [];
+      let m;
+      while ((m = sentenceRe.exec(stripped)) !== null) {
+        const sentence = m[0].trim();
+        if (!sentence) continue;
+        sentences.push({ text: sentence, start: m.index, end: m.index + m[0].length });
+      }
+      if (!sentences.length) sentences.push({ text: stripped, start:0, end: stripped.length });
+
+      const matches = Array.from(stripped.matchAll(reGlobal));
+      const totalMatches = matches.length;
+
+      const occurrences = [];
+      for (let mi = 0; mi < matches.length; mi++) {
+        const match = matches[mi];
+        const matchIndex = match.index;
+        let si = 0;
+        while (si < sentences.length && !(matchIndex >= sentences[si].start && matchIndex < sentences[si].end)) si++;
+        if (si >= sentences.length) si = sentences.length - 1;
+        const prev = sentences[si - 1] ? sentences[si - 1].text.trim() : '';
+        const curr = sentences[si].text.trim();
+        const next = sentences[si + 1] ? sentences[si + 1].text.trim() : '';
+
+        const truncate = str => {
+          if (!str) return '';
+          if (str.length <= maxSentenceLength) return str;
+          return str.slice(0, maxSentenceLength) + '...';
+        };
+
+        // Highlight within the current sentence using the same regex
+        const matchHtml = escapeHtml(curr).replace(reGlobal, '<strong>$1</strong>');
+
+        occurrences.push({
+          matchIndex,
+          prev: truncate(prev),
+          curr: truncate(curr),
+          next: truncate(next),
+          matchHtml
+        });
+      }
+
+      const start = (page - 1) * pageSize;
+      const pageItems = occurrences.slice(start, start + pageSize);
+      const hasMore = start + pageSize < occurrences.length;
+
+      return { ok:true, occurrences: pageItems, totalMatches, hasMore };
+    } catch (err) {
+      return { ok:false, error: err?.message || 'parse error' };
+    }
+  }
+
+  /* =========================
+     Results controls: Expand/Collapse All
+     ========================= */
+  document.getElementById('expandAllResults').addEventListener('click', () => {
+    document.querySelectorAll('#results .chapters-list').forEach(el => el.style.display = 'block');
+    document.querySelectorAll('#results .occ-container').forEach(el => el.style.display = 'block');
+  });
+  document.getElementById('collapseAllResults').addEventListener('click', () => {
+    document.querySelectorAll('#results .occ-container').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('#results .chapters-list').forEach(el => el.style.display = 'none');
+  });
+
+  /* =========================
+     Selection helpers and grouping
+     ========================= */
+  function getSelection(){
+    const selectedSeries = Array.from(document.querySelectorAll('.series-parent:checked')).map(cb => cb.dataset.series);
+    const selectedAuthors = Array.from(document.querySelectorAll('.author:checked')).map(cb => cb.value);
+    const rawSelectedBooks = Array.from(document.querySelectorAll('.book:checked')).map(cb => ({ title: cb.value, series: cb.dataset.series }));
+    const filteredBooks = rawSelectedBooks.filter(b => !selectedSeries.includes(b.series));
+    return { selectedBooks: filteredBooks, selectedSeries, selectedAuthors };
+  }
+
+  function buildGroupedTargets(selection) {
+    const { selectedBooks, selectedSeries, selectedAuthors } = selection;
+    const authorSeries = selectedAuthors.flatMap(a => authorsMap[a] || []);
+    const seriesSet = new Set([...selectedSeries, ...authorSeries]);
+
+    const grouped = [];
+    seriesSet.forEach(seriesName => {
+      const books = (catalog[seriesName] || []).map(title => ({ title, filename: fileForTitle(title) }));
+      grouped.push({ seriesName, books });
+    });
+
+    const bySeries = {};
+    selectedBooks.forEach(b => {
+      if (!bySeries[b.series]) bySeries[b.series] = [];
+      bySeries[b.series].push({ title: b.title, filename: fileForTitle(b.title) });
+    });
+    Object.keys(bySeries).forEach(seriesName => {
+      grouped.push({ seriesName, books: bySeries[seriesName] });
+    });
+
+    return grouped;
+  }
+
+  /* =========================
+     Main search flow (with punctuation guard)
+     ========================= */
+  const searchInput = document.getElementById('searchQuery');
+  const searchBtn = document.getElementById('searchBtn');
+  const resultsDiv = document.getElementById('results');
+
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      const v = searchInput.value.trim();
+      if (v.length > 0) {
+        e.preventDefault();
+        searchBtn.click();
+      }
+    }
+  });
+
+  searchBtn.addEventListener('click', async () => {
+    const queryRaw = searchInput.value.trim();
+
+    if (!queryRaw){
+      resultsDiv.innerHTML = `<p class="muted" style="color:#b00020">Error: Please enter a search term.</p>`;
+      return;
+    }
+
+    // Block queries that are only a single punctuation/symbol (e.g., ".", ",", "?" with optional spaces)
+    if (/^[\p{P}\p{S}]$/u.test(queryRaw)) {
+      resultsDiv.innerHTML = `<p class="muted" style="color:#b00020">Error: Queries cannot be only a single symbol.</p>`;
+      return;
+    }
+
+    const selection = getSelection();
+    const nothingSelected = !selection.selectedBooks.length && !selection.selectedSeries.length && !selection.selectedAuthors.length;
+    if (nothingSelected){
+      resultsDiv.innerHTML = `<p class="muted" style="color:#b00020">Error: Please choose a series, book, or author to search.</p>`;
+      return;
+    }
+
+    document.getElementById('resultsControls').style.display = 'flex';
+    resultsDiv.innerHTML = '<div class="spinner"></div>';
+
+    const groupedTargets = buildGroupedTargets(selection);
+    const groupedData = [];
+    let grandTotal = 0;
+
+    for (const seriesBlock of groupedTargets) {
+      const booksWithCounts = [];
+      for (const b of seriesBlock.books) {
+        const url = rawUrlForFile(b.filename);
+        const counts = await countMatchesInFile(url, queryRaw, { wholeWord: true });
+        booksWithCounts.push({ title: b.title, filename: b.filename, counts });
+        if (counts.ok) grandTotal += counts.totalMatches;
+      }
+      groupedData.push({ seriesName: seriesBlock.seriesName, books: booksWithCounts });
+    }
+
+    let html = `<h2>Search Results</h2><p>Query: <strong>${escapeHtml(queryRaw)}</strong></p>`;
+    html += `<p class="muted">${pluralize(grandTotal,'match')}</p>`;
+    resultsDiv.innerHTML = html;
+
+    const container = document.createElement('div');
+    resultsDiv.appendChild(container);
+
+    renderGroupedResults(container, groupedData, queryRaw);
+  });
+
+  /* =========================
+     Render results (single-series mode, show zero-match series with valid files, show errors, pluralization)
+     ========================= */
+  function renderGroupedResults(container, groupedData, query) {
+    container.innerHTML = '';
+
+    if (groupedData.length === 1) {
+      const seriesBlock = groupedData[0];
+      seriesBlock.books.forEach(book => renderBook(container, seriesBlock.seriesName, book, query));
+      return;
+    }
+
+    groupedData.forEach(seriesBlock => {
+      const totalMatches = seriesBlock.books.reduce((s,b)=>s+(b.counts.ok?b.counts.totalMatches:0),0);
+      const anyValidFile = seriesBlock.books.some(b => b.counts.ok);
+      const anyErrors = seriesBlock.books.some(b => !b.counts.ok);
+
+      // Skip series only if there are neither valid files nor errors (i.e., nothing to show)
+      if (!anyValidFile && !anyErrors) return;
+
+      const seriesDiv = document.createElement('div');
+      seriesDiv.className = 'series-block';
+
+      let headerRight;
+      if (!anyValidFile && anyErrors) {
+        headerRight = 'Error: files missing';
+      } else {
+        headerRight = pluralize(totalMatches, 'match'); // show 0 matches if valid files but no hits
+      }
+
+      const seriesHeader = document.createElement('div');
+      seriesHeader.style.display = 'flex';
+      seriesHeader.style.justifyContent = 'space-between';
+      seriesHeader.style.alignItems = 'center';
+      seriesHeader.style.cursor = 'pointer';
+      seriesHeader.innerHTML = `<div><strong>${escapeHtml(seriesBlock.seriesName)}</strong></div><div class="muted">${escapeHtml(headerRight)}</div>`;
+
+      const booksContainer = document.createElement('div');
+      booksContainer.style.display = 'none';
+      booksContainer.style.marginTop = '.6rem';
+
+      seriesHeader.addEventListener('click', () => {
+        booksContainer.style.display = booksContainer.style.display === 'block' ? 'none' : 'block';
+      });
+
+      seriesDiv.appendChild(seriesHeader);
+      seriesDiv.appendChild(booksContainer);
+
+      seriesBlock.books.forEach(book => renderBook(booksContainer, seriesBlock.seriesName, book, query));
+
+      container.appendChild(seriesDiv);
+    });
+  }
+
+  function renderBook(container, seriesName, book, query) {
+    const bookCard = document.createElement('div');
+    bookCard.className = 'book-card';
+
+    const bookHeader = document.createElement('div');
+    bookHeader.className = 'book-header';
+
+    if (book.counts.ok) {
+      bookHeader.innerHTML = `<div><strong>${escapeHtml(book.title)}</strong><div class="book-meta">Series: ${escapeHtml(seriesName)}</div></div><div class="muted">${pluralize(book.counts.totalMatches,'match')}</div>`;
+    } else {
+      bookHeader.innerHTML = `<div><strong>${escapeHtml(book.title)}</strong><div class="book-meta">Series: ${escapeHtml(seriesName)}</div></div><div class="muted">Error: ${escapeHtml(book.counts.error||'Unknown')}</div>`;
+    }
+
+    const chaptersList = document.createElement('div');
+    chaptersList.className = 'chapters-list';
+    chaptersList.style.display = 'none';
+
+    if (book.counts.ok) {
+      book.counts.chapters.forEach(ch => {
+        const chRow = document.createElement('div');
+        chRow.className = 'chapter-row';
+        chRow.innerHTML = `<div>${escapeHtml(ch.name)}</div><div class="muted">${pluralize(ch.chapterTotalMatches,'occurrence')}</div>`;
+
+        const occContainer = document.createElement('div');
+        occContainer.className = 'occ-container';
+        occContainer.style.display = 'none';
+
+        chRow.addEventListener('click', async () => {
+          const open = occContainer.style.display === 'block';
+          if (!open) {
+            occContainer.style.display = 'block';
+            if (!occContainer.dataset.loaded) {
+              occContainer.innerHTML = '<div class="spinner"></div>';
+              const res = await extractOccurrencesForChapter(rawUrlForFile(book.filename), ch.path, query, { page:1, pageSize:200, wholeWord:true, maxSentenceLength:400 });
+              occContainer.innerHTML = '';
+              if (!res.ok) { occContainer.innerHTML = `<div class="muted">Error: ${escapeHtml(res.error||'Unknown')}</div>`; return; }
+              res.occurrences.forEach((occ, idx) => {
+                const occIndex = idx + 1;
+                const btn = document.createElement('button');
+                btn.className = 'occurrence-btn';
+                btn.innerHTML = `<strong>Occurrence ${occIndex}</strong> — <span class="muted">${escapeHtml(occ.curr.slice(0,80))}${occ.curr.length>80?'...':''}</span>`;
+                btn.addEventListener('click', () => showOccurrenceModal(book.title, ch.name, occIndex, occ.prev, occ.matchHtml, occ.next));
+                occContainer.appendChild(btn);
+              });
+              occContainer.dataset.loaded = '1';
+            }
+          } else {
+            occContainer.style.display = 'none';
+          }
+        });
+
+        chaptersList.appendChild(chRow);
+        chaptersList.appendChild(occContainer);
+      });
+    }
+
+    bookHeader.addEventListener('click', () => {
+      const open = chaptersList.style.display === 'block';
+      chaptersList.style.display = open ? 'none' : 'block';
+    });
+
+    bookCard.appendChild(bookHeader);
+    bookCard.appendChild(chaptersList);
+    container.appendChild(bookCard);
+  }
+
+  /* =========================
+     Modal helpers
+     ========================= */
+  const modal = document.getElementById('occurrenceModal');
+  const modalTitle = document.getElementById('modalTitle');
+  const modalContent = document.getElementById('modalContent');
+  const modalClose = document.getElementById('modalClose');
+  modalClose.addEventListener('click', () => modal.style.display = 'none');
+  window.addEventListener('keydown', e => { if (e.key === 'Escape') modal.style.display = 'none'; });
+
+  function showOccurrenceModal(bookTitle, chapterName, occurrenceIndex, prev, matchHtml, next) {
+    modalTitle.textContent = `${bookTitle} — ${chapterName} — occurrence ${occurrenceIndex}`;
+    const prevHtml = prev ? `<div style="margin-bottom:.5rem;color:#444">${escapeHtml(prev)}</div>` : '';
+    const currHtml = `<div class="highlight-sentence">${matchHtml}</div>`;
+    const nextHtml = next ? `<div style="color:#444">${escapeHtml(next)}</div>` : '';
+    modalContent.innerHTML = prevHtml + currHtml + nextHtml;
+    modal.style.display = 'flex';
+  }
+  </script>
+</body>
+</html>
