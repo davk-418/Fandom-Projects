@@ -1,6 +1,6 @@
-# Keeper of the Lost Cities Searcher
+# Series Searcher
 
-A fast, browser-based search tool for exploring word and phrase occurrences across the **Keeper of the Lost Cities (KOTLC)** book series.  
+A fast, browser-based search tool for exploring word and phrase occurrences across multiple fantasy and fiction series 
 The tool automatically fetches the EPUB files, parses them client-side, and displays every match—organized by **series → book → chapter → occurrence**.
 
 Future updates will add support for additional book series.
@@ -9,7 +9,7 @@ Future updates will add support for additional book series.
 
 ## Features
 
-- **Full-text search** across the entire KOTLC series  
+- **Full-text search** across multiple series
 -  **Automatic EPUB fetching** — no renaming or configuration required  
 -  Results grouped by **book → chapter → occurrence**  
 - Expand/collapse navigation for clean browsing  
@@ -39,7 +39,7 @@ Download only the files you want:
 
 ### Standard Search
 1. Open **Series Searcher Code.html**.  
-2. In the sidebar, check the **KOTLC** parent series (selects all books).  
+2. In the sidebar, select any book or series or use the 'Select all' option to select all series
 3. Enter a word or phrase in the search bar.  
 4. Press **Enter** or click **Search**.  
 5. Explore results grouped by:
